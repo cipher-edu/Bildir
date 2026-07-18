@@ -174,6 +174,12 @@ export const catalogAdminApi = {
     api.delete(`/catalog/subjects/${id}/`),
 };
 
+// ── Audit Loglar ─────────────────────────────────────────────
+export const auditApi = {
+  list: (params?: Record<string, string>) =>
+    api.get("/auth/audit/", { params }),
+};
+
 // ── Catalog Sync (HEMIS) ─────────────────────────────────────
 export const catalogSyncApi = {
   stats: () =>

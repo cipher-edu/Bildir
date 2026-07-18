@@ -178,3 +178,70 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def is_proctor(self):
         return self.role == self.Role.PROCTOR
+
+
+def _get_client_ip(request):
+    xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
+class AuditLog(models.Model):
+    class Action(models.TextChoices):
+        LOGIN_OK        = "login_ok",        "Login (muvaffaqiyatli)"
+        LOGIN_FAIL      = "login_fail",      "Login (muvaffaqiyatsiz)"
+        LOGOUT          = "logout",          "Chiqish"
+        USER_CREATE     = "user_create",     "Foydalanuvchi yaratildi"
+        USER_UPDATE     = "user_update",     "Foydalanuvchi yangilandi"
+        USER_DEACTIVATE = "user_deactivate", "Foydalanuvchi bloklandi"
+        USER_ACTIVATE   = "user_activate",   "Foydalanuvchi faollashtirildi"
+        ROLE_CHANGE     = "role_change",     "Rol o'zgartirildi"
+        PWD_RESET       = "pwd_reset",       "Parol tiklash"
+        HEMIS_SYNC      = "hemis_sync",      "HEMIS sinxronlash"
+
+    actor        = models.ForeignKey(
+        User, null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_actions",
+    )
+    target       = models.ForeignKey(
+        User, null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_events",
+    )
+    target_email = models.CharField(max_length=255, blank=True)
+    action       = models.CharField(max_length=30, choices=Action.choices, db_index=True)
+    success      = models.BooleanField(default=True)
+    ip_address   = models.GenericIPAddressField(null=True, blank=True)
+    user_agent   = models.CharField(max_length=500, blank=True)
+    extra        = models.JSONField(default=dict, blank=True)
+    created_at   = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "audit_log"
+        ordering = ["-created_at"]
+        verbose_name = "Audit log"
+        verbose_name_plural = "Audit loglar"
+
+    def __str__(self):
+        return f"{self.action} — {self.target_email} ({self.created_at:%Y-%m-%d %H:%M})"
+
+    @classmethod
+    def log(cls, action, *, actor=None, target=None, target_email="",
+            success=True, request=None, extra=None):
+        ip = ua = ""
+        if request:
+            ip = _get_client_ip(request)
+            ua = request.META.get("HTTP_USER_AGENT", "")[:500]
+        email = target_email or (target.email if target else "")
+        cls.objects.create(
+            actor=actor,
+            target=target,
+            target_email=email,
+            action=action,
+            success=success,
+            ip_address=ip or None,
+            user_agent=ua,
+            extra=extra or {},
+        )

@@ -9,7 +9,7 @@ import { ROLE_LABELS, ROLE_COLORS } from "@/lib/roles";
 import { UserRole } from "@/types";
 import {
   LayoutDashboard, Users, Database, RefreshCw,
-  LogOut, User, Menu, X, ChevronRight,
+  LogOut, User, Menu, X, ChevronRight, Shield,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["admin", "superadmin", "audit_inspector"];
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/admin/users",      label: "Foydalanuvchilar",   icon: Users,           roles: ADMIN_ROLES },
   { href: "/admin/catalog",    label: "Katalog",             icon: Database,        roles: EDIT_ROLES },
   { href: "/admin/hemis-sync", label: "HEMIS Sinxronlash",   icon: RefreshCw,       roles: EDIT_ROLES },
+  { href: "/admin/audit",      label: "Audit loglar",        icon: Shield,          roles: ADMIN_ROLES },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

@@ -26,7 +26,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .models import User
+from .models import User, AuditLog
 from .throttles import RefreshTokenThrottle
 from .serializers import (
     UserSerializer, UserUpdateSerializer,
@@ -112,11 +112,18 @@ class LoginView(APIView):
 
         user = authenticate(request, email=email, password=password)
         if not user:
+            AuditLog.log(AuditLog.Action.LOGIN_FAIL, target_email=email,
+                         success=False, request=request,
+                         extra={"reason": "wrong_credentials"})
             return _error("Email yoki parol noto'g'ri.", status.HTTP_401_UNAUTHORIZED)
 
         if not user.is_active:
+            AuditLog.log(AuditLog.Action.LOGIN_FAIL, target=user,
+                         success=False, request=request,
+                         extra={"reason": "inactive"})
             return _error("Hisob faol emas. Administrator bilan bog'laning.", status.HTTP_403_FORBIDDEN)
 
+        AuditLog.log(AuditLog.Action.LOGIN_OK, target=user, request=request)
         return _success({"user": UserSerializer(user).data, "tokens": _tokens(user)})
 
 
@@ -523,6 +530,8 @@ class LogoutView(APIView):
             RefreshToken(refresh).blacklist()
         except Exception:
             pass  # allaqachon blacklistda bo'lsa — muammo emas
+        AuditLog.log(AuditLog.Action.LOGOUT, actor=request.user,
+                     target=request.user, request=request)
         return _success({"detail": "Muvaffaqiyatli chiqildi."})
 
 
@@ -713,6 +722,8 @@ class AdminUserListView(APIView):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
+            AuditLog.log(AuditLog.Action.USER_CREATE, actor=request.user,
+                         target=user, request=request)
             return _success(UserSerializer(user).data, status.HTTP_201_CREATED)
         return Response({"success": False, "errors": serializer.errors},
                         status=status.HTTP_400_BAD_REQUEST)
@@ -761,6 +772,19 @@ class AdminUserDetailView(APIView):
             setattr(user, field, value)
         user.save(update_fields=list(data.keys()))
 
+        # Audit logging
+        if "role" in data and data["role"] != old_role:
+            AuditLog.log(AuditLog.Action.ROLE_CHANGE, actor=request.user,
+                         target=user, request=request,
+                         extra={"old_role": old_role, "new_role": data["role"]})
+        elif "is_active" in data:
+            action = (AuditLog.Action.USER_ACTIVATE
+                      if data["is_active"] else AuditLog.Action.USER_DEACTIVATE)
+            AuditLog.log(action, actor=request.user, target=user, request=request)
+        else:
+            AuditLog.log(AuditLog.Action.USER_UPDATE, actor=request.user,
+                         target=user, request=request)
+
         return _success(UserSerializer(user).data)
 
     def delete(self, request, pk):
@@ -773,6 +797,8 @@ class AdminUserDetailView(APIView):
             return _error("O'zingizni o'chira olmaysiz.", status.HTTP_400_BAD_REQUEST)
         user.is_active = False
         user.save(update_fields=["is_active"])
+        AuditLog.log(AuditLog.Action.USER_DEACTIVATE, actor=request.user,
+                     target=user, request=request)
         return _success({"detail": "Foydalanuvchi deaktiv qilindi."})
 
 
@@ -806,6 +832,88 @@ class SystemStatsView(APIView):
                 "inactive": inactive_users,
                 "by_role":  role_counts,
             },
+        })
+
+
+# ═══════════════════════════════════════════════════════════════
+# Admin — Audit loglar
+# ═══════════════════════════════════════════════════════════════
+class AuditLogListView(APIView):
+    """
+    Tizim audit loglari (admin/superadmin/audit_inspector uchun).
+
+        GET /api/v1/auth/audit/
+        ?action=login_ok|login_fail|logout|user_create|...
+        &success=true|false
+        &actor_id=<uuid>
+        &date_from=2024-01-01T00:00:00
+        &date_to=2024-12-31T23:59:59
+        &page=1&page_size=50
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in ADMIN_ROLES:
+            return _error("Ruxsat yo'q.", status.HTTP_403_FORBIDDEN)
+
+        qs = AuditLog.objects.select_related("actor", "target").order_by("-created_at")
+
+        action = request.query_params.get("action")
+        if action:
+            qs = qs.filter(action=action)
+
+        success_param = request.query_params.get("success")
+        if success_param is not None:
+            qs = qs.filter(success=(success_param.lower() == "true"))
+
+        actor_id = request.query_params.get("actor_id")
+        if actor_id:
+            qs = qs.filter(actor_id=actor_id)
+
+        date_from = request.query_params.get("date_from")
+        if date_from:
+            from django.utils.dateparse import parse_datetime
+            dt = parse_datetime(date_from)
+            if dt:
+                qs = qs.filter(created_at__gte=dt)
+
+        date_to = request.query_params.get("date_to")
+        if date_to:
+            from django.utils.dateparse import parse_datetime
+            dt = parse_datetime(date_to)
+            if dt:
+                qs = qs.filter(created_at__lte=dt)
+
+        from utils import safe_int
+        page      = safe_int(request.query_params.get("page"), 1, minimum=1)
+        page_size = safe_int(request.query_params.get("page_size"), 50, minimum=1, maximum=200)
+        total     = qs.count()
+        offset    = (page - 1) * page_size
+        logs      = qs[offset: offset + page_size]
+
+        def _name(u):
+            if not u:
+                return None
+            return f"{u.last_name} {u.first_name}".strip() or u.email
+
+        return _success({
+            "data": [
+                {
+                    "id":           log.pk,
+                    "action":       log.action,
+                    "actor_email":  log.actor.email if log.actor else None,
+                    "actor_name":   _name(log.actor),
+                    "target_email": log.target_email or (log.target.email if log.target else None),
+                    "target_name":  _name(log.target),
+                    "success":      log.success,
+                    "ip_address":   log.ip_address,
+                    "user_agent":   log.user_agent,
+                    "extra":        log.extra,
+                    "created_at":   log.created_at.isoformat(),
+                }
+                for log in logs
+            ],
+            "meta": {"total": total, "page": page, "page_size": page_size},
         })
 
 

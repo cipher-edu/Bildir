@@ -37,4 +37,7 @@ urlpatterns = [
 
     # ── Admin — Tizim statistikasi ───────────────────────────────
     path("stats/",               views.SystemStatsView.as_view(),      name="system-stats"),
+
+    # ── Admin — Audit loglar ─────────────────────────────────────
+    path("audit/",               views.AuditLogListView.as_view(),     name="audit-log"),
 ]
