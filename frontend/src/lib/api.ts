@@ -138,4 +138,56 @@ export const catalogApi = {
     api.get("/catalog/subjects/", {
       params: { ...(facultyId ? { faculty_id: facultyId } : {}), compact: "true" },
     }),
+
+  subjectsPaged: (params?: Record<string, string>) =>
+    api.get("/catalog/subjects/", { params }),
+};
+
+// ── Catalog Admin (CRUD) ─────────────────────────────────────
+export const catalogAdminApi = {
+  createUniversity: (data: Record<string, unknown>) =>
+    api.post("/catalog/universities/", data),
+  updateUniversity: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/catalog/universities/${id}/`, data),
+  deleteUniversity: (id: string) =>
+    api.delete(`/catalog/universities/${id}/`),
+
+  createFaculty: (data: Record<string, unknown>) =>
+    api.post("/catalog/faculties/", data),
+  updateFaculty: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/catalog/faculties/${id}/`, data),
+  deleteFaculty: (id: string) =>
+    api.delete(`/catalog/faculties/${id}/`),
+
+  createSpecialty: (data: Record<string, unknown>) =>
+    api.post("/catalog/specialties/", data),
+  updateSpecialty: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/catalog/specialties/${id}/`, data),
+  deleteSpecialty: (id: string) =>
+    api.delete(`/catalog/specialties/${id}/`),
+
+  createSubject: (data: Record<string, unknown>) =>
+    api.post("/catalog/subjects/", data),
+  updateSubject: (id: number, data: Record<string, unknown>) =>
+    api.patch(`/catalog/subjects/${id}/`, data),
+  deleteSubject: (id: number) =>
+    api.delete(`/catalog/subjects/${id}/`),
+};
+
+// ── Catalog Sync (HEMIS) ─────────────────────────────────────
+export const catalogSyncApi = {
+  stats: () =>
+    api.get("/catalog/sync/"),
+
+  start: (config: Record<string, unknown>) =>
+    api.post("/catalog/sync/", config),
+
+  status: (syncId: string) =>
+    api.get("/catalog/sync/status/", { params: { sync_id: syncId } }),
+
+  history: () =>
+    api.get("/catalog/sync/history/"),
+
+  syncUsers: (data: { role?: string; limit?: number }) =>
+    api.post("/catalog/sync/users/", data),
 };

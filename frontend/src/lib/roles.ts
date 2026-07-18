@@ -16,7 +16,7 @@ export const ROLE_GROUP: Record<UserRole, RoleGroup> = {
 export const ROLE_HOME: Record<RoleGroup, string> = {
   student: "/home",
   teacher: "/home",
-  staff:   "/home",
+  staff:   "/admin",
 };
 
 export function getRoleGroup(role: UserRole): RoleGroup {
