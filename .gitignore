@@ -1,0 +1,55 @@
+# ── Python / Django ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+env/
+.venv/
+.env.local.bak
+
+# Django
+backend/db.sqlite3
+backend/media/
+backend/staticfiles/
+backend/*.log
+backend/logs/
+
+# JWT keys (generate qiling, commitlamang)
+backend/keys/
+*.pem
+*.key
+*.pub
+
+# ── Node / Next.js ────────────────────────────────────────────
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/.turbo/
+frontend/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Environment / Secrets ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── OS ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
