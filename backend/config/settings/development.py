@@ -8,7 +8,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
-    default="localhost,127.0.0.1,0.0.0.0",
+    default="localhost,127.0.0.1,0.0.0.0,backend",
     cast=Csv(),
 )
 
@@ -27,6 +27,20 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# SQLite WAL — parallel o'qish/yozish (runserver + sync)
+from django.db.backends.signals import connection_created
+
+
+def _sqlite_on_connect(sender, connection, **kwargs):
+    if connection.vendor == "sqlite":
+        cursor = connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA busy_timeout=60000;")
+        cursor.execute("PRAGMA synchronous=NORMAL;")
+
+
+connection_created.connect(_sqlite_on_connect)
 
 LOGGING = {
     "version": 1,

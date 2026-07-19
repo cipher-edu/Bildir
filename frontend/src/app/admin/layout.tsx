@@ -7,27 +7,38 @@ import { authApi } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
 import { ROLE_LABELS, ROLE_COLORS } from "@/lib/roles";
 import { UserRole } from "@/types";
+import { useI18n } from "@/i18n/I18nProvider";
+import LanguageSwitcher from "@/components/i18n/LanguageSwitcher";
 import {
   LayoutDashboard, Users, Database, RefreshCw,
-  LogOut, User, Menu, X, ChevronRight, Shield,
+  LogOut, User, Menu, X, ChevronRight, Shield, ClipboardList, BarChart3,
+  Briefcase, MessageSquareText, Newspaper, AlertTriangle, MessageCircleWarning,
 } from "lucide-react";
 
 const ADMIN_ROLES = ["admin", "superadmin", "audit_inspector"];
 const EDIT_ROLES  = ["admin", "superadmin"];
 
-const NAV_ITEMS = [
-  { href: "/admin",            label: "Dashboard",          icon: LayoutDashboard, roles: null },
-  { href: "/admin/users",      label: "Foydalanuvchilar",   icon: Users,           roles: ADMIN_ROLES },
-  { href: "/admin/catalog",    label: "Katalog",             icon: Database,        roles: EDIT_ROLES },
-  { href: "/admin/hemis-sync", label: "HEMIS Sinxronlash",   icon: RefreshCw,       roles: EDIT_ROLES },
-  { href: "/admin/audit",      label: "Audit loglar",        icon: Shield,          roles: ADMIN_ROLES },
-];
-
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname  = usePathname();
   const router    = useRouter();
+  const { t } = useI18n();
   const { user, isReady } = useRoleGuard(["staff"]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const NAV_ITEMS = [
+    { href: "/admin",            label: t("admin.dashboard"), icon: LayoutDashboard, roles: null as string[] | null },
+    { href: "/admin/users",      label: t("admin.users"),     icon: Users,           roles: ADMIN_ROLES },
+    { href: "/admin/surveys",    label: t("admin.surveys"),   icon: ClipboardList,   roles: ADMIN_ROLES },
+    { href: "/admin/results",    label: t("admin.results"),   icon: BarChart3,       roles: ADMIN_ROLES },
+    { href: "/admin/news",       label: t("admin.news"),      icon: Newspaper,       roles: EDIT_ROLES },
+    { href: "/admin/officials",  label: t("admin.officials"), icon: Briefcase,       roles: EDIT_ROLES },
+    { href: "/admin/appeals",    label: t("admin.appeals"),   icon: MessageSquareText, roles: ADMIN_ROLES },
+    { href: "/admin/risks",      label: t("admin.risk"),      icon: AlertTriangle,   roles: ADMIN_ROLES },
+    { href: "/admin/whistle",    label: t("admin.whistle"),   icon: MessageCircleWarning, roles: ADMIN_ROLES },
+    { href: "/admin/catalog",    label: t("admin.catalog"),   icon: Database,        roles: EDIT_ROLES },
+    { href: "/admin/hemis-sync", label: t("admin.hemis"),     icon: RefreshCw,       roles: EDIT_ROLES },
+    { href: "/admin/audit",      label: t("admin.audit"),     icon: Shield,          roles: ADMIN_ROLES },
+  ];
 
   useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
@@ -42,7 +53,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const role      = user.role as UserRole;
   const roleColor = ROLE_COLORS[role] ?? "#6366f1";
   const roleLabel = ROLE_LABELS[role] ?? role;
-  const navItems  = NAV_ITEMS.filter((n) => !n.roles || n.roles.includes(role));
+  const navItems  = NAV_ITEMS.filter((n) => !n.roles || n.roles!.includes(role));
 
   async function handleLogout() {
     try { await authApi.logout(); } catch { /* ignore */ }
@@ -70,8 +81,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex flex-col h-full">
       {/* Brand */}
       <div className="p-5 border-b border-white/[0.06]">
-        <p className="text-sm font-bold text-white tracking-tight">hemis-auth</p>
-        <p className="text-xs text-slate-500 mt-0.5">Admin panel</p>
+        <p className="text-sm font-bold text-white tracking-tight">{t("brand")}</p>
+        <p className="text-xs text-slate-500 mt-0.5">{t("admin.panel")}</p>
+        <div className="mt-3">
+          <LanguageSwitcher />
+        </div>
       </div>
 
       {/* User card */}
@@ -104,13 +118,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Link href="/home"
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-slate-400 hover:bg-white/5 hover:text-white transition-all border border-transparent">
           <User className="w-4 h-4" />
-          Profil sahifasi
+          {t("nav.cabinet")}
         </Link>
         <button
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-red-400 hover:bg-red-500/10 transition-all border border-transparent">
           <LogOut className="w-4 h-4" />
-          Chiqish
+          {t("common.logout")}
         </button>
       </div>
     </div>
@@ -145,7 +159,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors">
             <Menu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-bold">hemis-auth admin</span>
+          <span className="text-sm font-bold">Bildir admin</span>
           <button
             onClick={() => setSidebarOpen(false)}
             className={`p-2 rounded-lg text-slate-400 transition-all ${sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}>

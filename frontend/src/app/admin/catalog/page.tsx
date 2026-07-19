@@ -125,19 +125,19 @@ function UniversitiesTab({ isAdmin }: { isAdmin: boolean }) {
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Qisqa nomi</label>
-              <input className="input-dark w-full text-sm py-2" value={form.short_name} onChange={e => setForm(p => ({ ...p, short_name: e.target.value }))} placeholder="NSPI" />
+              <input className="input-dark w-full text-sm py-2" value={form.short_name} onChange={e => setForm(p => ({ ...p, short_name: e.target.value }))} placeholder="NDU" />
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Kod *</label>
-              <input className="input-dark w-full text-sm py-2" value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} placeholder="NSPI" />
+              <input className="input-dark w-full text-sm py-2" value={form.code} onChange={e => setForm(p => ({ ...p, code: e.target.value }))} placeholder="NDU" />
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">Shahar</label>
-              <input className="input-dark w-full text-sm py-2" value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))} placeholder="Nukus" />
+              <input className="input-dark w-full text-sm py-2" value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))} placeholder="Navoiy" />
             </div>
             <div className="col-span-2">
               <label className="block text-xs text-slate-400 mb-1">HEMIS domeni</label>
-              <input className="input-dark w-full text-sm py-2" value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} placeholder="nspi.uz" />
+              <input className="input-dark w-full text-sm py-2" value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} placeholder="ndu.uz" />
             </div>
           </div>
           <div className="flex gap-3 pt-1">

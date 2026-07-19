@@ -1,76 +1,318 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  GraduationCap, LogIn, Shield, Loader2, AlertCircle,
+  GraduationCap, Shield, Loader2, AlertCircle,
   Users, Mail, Eye, EyeOff, ArrowRight, Sparkles,
-  BookOpen, Award, Globe, Lock, ChevronLeft,
-  CheckCircle, Zap, User, KeyRound,
+  Lock, ChevronLeft, User, KeyRound,
+  ClipboardList, MessageSquareText,
+  BarChart3, Building2, Scale, QrCode, Clock,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { authApi } from "@/lib/api";
 import { getRoleHome } from "@/lib/roles";
 import { UserRole } from "@/types";
 import StarField from "@/components/ui/StarField";
+import { useI18n } from "@/i18n/I18nProvider";
+import LanguageSwitcher from "@/components/i18n/LanguageSwitcher";
 
 type LoginMode = "oauth" | "sso_student" | "sso_teacher" | "email";
 
-const TABS: {
-  key:     LoginMode;
-  label:   string;
-  icon:    React.ElementType;
-  accent:  string;
-  glow:    string;
-}[] = [
-  { key: "oauth",       label: "HEMIS OAuth",  icon: Shield,        accent: "#22d3ee", glow: "rgba(34,211,238,0.35)"  },
-  { key: "sso_student", label: "Talaba",        icon: GraduationCap, accent: "#6366f1", glow: "rgba(99,102,241,0.35)"  },
-  { key: "sso_teacher", label: "O'qituvchi",    icon: Users,         accent: "#a78bfa", glow: "rgba(167,139,250,0.35)" },
-  { key: "email",       label: "Email",         icon: Mail,          accent: "#fbbf24", glow: "rgba(251,191,36,0.3)"   },
-];
-
+/** Bildir / NDU Komplayens — chap panel floating kartalar */
 const LEFT_CARDS: {
   icon: React.ElementType; label: string; sub: string;
   pos: { top?: string; left?: string; right?: string; bottom?: string };
   color: string; dur: string;
 }[] = [
-  { icon: BookOpen, label: "500K+ Imtihon",      sub: "Muvaffaqiyatli o'tkazildi",  pos: { top: "12%",  left: "5%"  }, color: "#6366f1", dur: "7s"  },
-  { icon: Shield,   label: "Blockchain Kafolat", sub: "Har bir natija muhrlangan",  pos: { top: "32%",  right: "4%" }, color: "#22d3ee", dur: "9s"  },
-  { icon: Award,    label: "AI Baholash",         sub: "GPT-4 real vaqt tahlil",    pos: { top: "58%",  left: "4%"  }, color: "#a78bfa", dur: "8s"  },
-  { icon: Globe,    label: "HEMIS SSO",           sub: "Davlat tizimi integratsiya", pos: { bottom: "10%", right: "6%" }, color: "#34d399", dur: "11s" },
-  { icon: Zap,      label: "50K Concurrent",     sub: "Bir vaqtda foydalanuvchi",   pos: { bottom: "28%", left: "28%" }, color: "#fbbf24", dur: "6s"  },
+  { icon: ClipboardList, label: "Anonim so'rovnoma", sub: "Shaxs bog'lanmaydi",       pos: { top: "14%",  left: "5%"  }, color: "#6366f1", dur: "7s"  },
+  { icon: MessageSquareText, label: "Murojaat markazi", sub: "72 soat SLA",            pos: { top: "30%",  right: "4%" }, color: "#f59e0b", dur: "9s"  },
+  { icon: EyeOff,  label: "Maxfiylik muhri",    sub: "AES-GCM + HMAC",              pos: { top: "54%",  left: "4%"  }, color: "#22d3ee", dur: "8s"  },
+  { icon: Shield,   label: "HEMIS SSO",          sub: "Davlat tizimi orqali kirish", pos: { bottom: "12%", right: "5%" }, color: "#34d399", dur: "11s" },
+  { icon: BarChart3, label: "Jonli analitika",   sub: "Kesimlar va dashboard",       pos: { bottom: "30%", left: "22%" }, color: "#a78bfa", dur: "6.5s" },
 ];
 
-/* ─── Orbital visualization for left panel ──────────────────────── */
-function OrbitalViz() {
+const FEATURE_POINTS = [
+  { text: "HEMIS SSO — talaba va xodim uchun xavfsiz kirish", color: "#22d3ee", icon: Shield },
+  { text: "Anonim so'rovnomalar — javoblar shifrlangan va muhrlangan", color: "#6366f1", icon: ClipboardList },
+  { text: "Murojaat + fayl — 72 soat ichida javob (SLA)", color: "#f59e0b", icon: Clock },
+  { text: "Ochiqlik va komplayens — NDU Halollik madaniyati", color: "#34d399", icon: Scale },
+] as const;
+
+/* ─── Chap panel vizual — Bildir brand core ──────────────────── */
+function BrandViz() {
   return (
-    <div className="relative flex items-center justify-center" style={{ width: 320, height: 320 }}>
-      {/* Glow core */}
-      <div className="absolute rounded-full pointer-events-none"
-        style={{ width: 220, height: 220, background: "radial-gradient(circle, rgba(99,102,241,0.4) 0%, rgba(99,102,241,0.12) 50%, transparent 70%)", filter: "blur(32px)", animation: "glowPulse 4s ease-in-out infinite" }} />
-
-      {/* Orbit rings */}
-      <div className="orbit-ring absolute" style={{ width: 270, height: 270, animation: "rotateRing 30s linear infinite" }} />
-      <div className="orbit-ring absolute" style={{ width: 220, height: 220, animation: "rotateRing 20s linear infinite reverse", borderColor: "rgba(34,211,238,0.1)" }} />
-      <div className="orbit-ring absolute" style={{ width: 170, height: 170, borderColor: "rgba(167,139,250,0.12)", animation: "rotateRing 14s linear infinite" }} />
-
-      {/* Orbiting dots */}
-      <div className="absolute w-3 h-3 rounded-full"
-        style={{ background: "radial-gradient(circle, #22d3ee, #6366f1)", boxShadow: "0 0 10px #22d3ee", animation: "orbitSpin 30s linear infinite", top: "calc(50% - 135px)", left: "50%", transformOrigin: "0 135px" }} />
-      <div className="absolute w-2 h-2 rounded-full"
-        style={{ background: "#a78bfa", boxShadow: "0 0 8px #a78bfa", animation: "orbitSpin 20s linear infinite reverse", top: "calc(50% - 110px)", left: "50%", transformOrigin: "0 110px" }} />
-      <div className="absolute w-2 h-2 rounded-full"
-        style={{ background: "#fbbf24", boxShadow: "0 0 6px #fbbf24", animation: "orbitSpin 14s linear infinite", top: "calc(50% - 85px)", left: "50%", transformOrigin: "0 85px" }} />
-
-      {/* Core sphere */}
-      <div className="relative z-10 rounded-full flex items-center justify-center"
+    <div className="relative flex items-center justify-center w-[280px] h-[280px] sm:w-[300px] sm:h-[300px]">
+      <div
+        className="absolute rounded-full pointer-events-none blur-3xl animate-pulse-slow"
         style={{
-          width: 110, height: 110,
-          background: "radial-gradient(circle at 36% 32%, #818cf8 0%, #4f46e5 40%, #1e1b4b 75%, #090720 100%)",
-          boxShadow: "0 0 50px rgba(99,102,241,0.6), 0 0 100px rgba(99,102,241,0.2), inset -8px -10px 30px rgba(0,0,0,0.55)",
-        }}>
-        <div className="absolute top-3 left-5 rounded-full opacity-25 pointer-events-none"
-          style={{ width: 36, height: 18, background: "radial-gradient(ellipse, rgba(255,255,255,0.7), transparent)" }} />
-        <GraduationCap className="w-10 h-10 text-white/50" />
+          width: 200,
+          height: 200,
+          background:
+            "radial-gradient(circle, rgba(99,102,241,0.45) 0%, rgba(34,211,238,0.12) 45%, transparent 70%)",
+        }}
+      />
+
+      {/* Rings */}
+      <div
+        className="absolute rounded-full border border-indigo-400/20"
+        style={{ width: 250, height: 250, animation: "rotateRing 28s linear infinite" }}
+      />
+      <div
+        className="absolute rounded-full border border-cyan-400/15"
+        style={{ width: 200, height: 200, animation: "rotateRing 18s linear infinite reverse" }}
+      />
+      <div
+        className="absolute rounded-full border border-violet-400/15 border-dashed"
+        style={{ width: 155, height: 155, animation: "rotateRing 12s linear infinite" }}
+      />
+
+      {/* Orbiting feature pips */}
+      <div
+        className="absolute w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_10px_#22d3ee]"
+        style={{
+          top: "calc(50% - 125px)",
+          left: "50%",
+          transformOrigin: "0 125px",
+          animation: "orbitSpin 28s linear infinite",
+        }}
+      />
+      <div
+        className="absolute w-2 h-2 rounded-full bg-violet-400 shadow-[0_0_8px_#a78bfa]"
+        style={{
+          top: "calc(50% - 100px)",
+          left: "50%",
+          transformOrigin: "0 100px",
+          animation: "orbitSpin 18s linear infinite reverse",
+        }}
+      />
+      <div
+        className="absolute w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"
+        style={{
+          top: "calc(50% - 77px)",
+          left: "50%",
+          transformOrigin: "0 77px",
+          animation: "orbitSpin 12s linear infinite",
+        }}
+      />
+
+      {/* Core */}
+      <div
+        className="relative z-10 w-[104px] h-[104px] rounded-[1.75rem] flex items-center justify-center"
+        style={{
+          background:
+            "linear-gradient(145deg, #818cf8 0%, #4f46e5 42%, #312e81 78%, #0f0a2e 100%)",
+          boxShadow:
+            "0 0 48px rgba(99,102,241,0.55), 0 0 90px rgba(34,211,238,0.12), inset 0 1px 0 rgba(255,255,255,0.25)",
+        }}
+      >
+        <div
+          className="absolute top-3 left-4 w-9 h-4 rounded-full opacity-30 pointer-events-none"
+          style={{ background: "radial-gradient(ellipse, rgba(255,255,255,0.8), transparent)" }}
+        />
+        <GraduationCap className="w-11 h-11 text-white drop-shadow-lg" />
+        <span className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-xl bg-emerald-500/90 border-2 border-[#0a1020] flex items-center justify-center shadow-lg">
+          <Shield className="w-3.5 h-3.5 text-white" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Chap panel — to‘liq info bo‘limi */
+function LoginInfoPanel({ mounted }: { mounted: boolean }) {
+  return (
+    <div className="hidden lg:flex flex-col w-[46%] relative overflow-hidden">
+      {/* Fon */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            "linear-gradient(165deg, #020617 0%, #060d1f 40%, #0c1235 72%, #04060f 100%)",
+        }}
+      />
+      <div className="absolute inset-0 landing-mesh opacity-40" />
+      <StarField count={56} opacity={0.32} meteors={3} />
+
+      <div
+        className="absolute rounded-full pointer-events-none opacity-25 blur-[90px]"
+        style={{
+          width: 520,
+          height: 520,
+          background: "radial-gradient(circle, #6366f1, transparent 70%)",
+          top: -140,
+          left: -160,
+          animation: "nebulaFloat 18s ease-in-out infinite",
+        }}
+      />
+      <div
+        className="absolute rounded-full pointer-events-none opacity-20 blur-[80px]"
+        style={{
+          width: 400,
+          height: 400,
+          background: "radial-gradient(circle, #22d3ee, transparent 70%)",
+          bottom: -80,
+          right: -100,
+          animation: "nebulaFloat 22s ease-in-out infinite 4s",
+        }}
+      />
+      <div
+        className="absolute rounded-full pointer-events-none opacity-15 blur-[70px]"
+        style={{
+          width: 280,
+          height: 280,
+          background: "radial-gradient(circle, #a78bfa, transparent 70%)",
+          top: "48%",
+          right: "8%",
+          animation: "nebulaFloat 14s ease-in-out infinite 2s",
+        }}
+      />
+
+      {/* Floating badges */}
+      {mounted &&
+        LEFT_CARDS.map(({ icon: Icon, label, sub, pos, color, dur }) => (
+          <div
+            key={label}
+            className="absolute z-[5] flex items-center gap-2.5 px-3 py-2 rounded-2xl backdrop-blur-md"
+            style={{
+              ...pos,
+              background: `${color}0d`,
+              border: `1px solid ${color}28`,
+              boxShadow: `0 8px 28px rgba(0,0,0,0.25), 0 0 20px ${color}12`,
+              animation: `floatY ${dur} ease-in-out infinite`,
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+              style={{
+                background: `${color}18`,
+                border: `1px solid ${color}30`,
+              }}
+            >
+              <Icon className="w-3.5 h-3.5" style={{ color }} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white leading-tight">{label}</p>
+              <p className="text-[10px] text-slate-400 leading-tight">{sub}</p>
+            </div>
+          </div>
+        ))}
+
+      {/* Asosiy kontent */}
+      <div className="relative z-10 flex flex-col justify-between h-full px-10 xl:px-12 py-9">
+        {/* Logo + org */}
+        <div>
+          <Link href="/" className="inline-flex items-center gap-3 group">
+            <div className="relative">
+              <div
+                className="w-11 h-11 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform"
+                style={{
+                  background: "linear-gradient(135deg, #6366f1, #4f46e5, #7c3aed)",
+                  boxShadow: "0 0 24px rgba(99,102,241,0.45)",
+                }}
+              >
+                <GraduationCap className="w-6 h-6 text-white" />
+              </div>
+            </div>
+            <div>
+              <p className="font-extrabold text-lg text-white tracking-tight leading-none">
+                Bildir
+              </p>
+              <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1.5">
+                <span className="live-dot !w-1.5 !h-1.5" />
+                NDU · Komplayens
+              </p>
+            </div>
+          </Link>
+        </div>
+
+        {/* Markaz */}
+        <div className="flex flex-col items-center gap-5 -mt-2">
+          <BrandViz />
+
+          <div className="text-center max-w-md">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 mb-4 rounded-full border border-indigo-400/30 bg-indigo-500/10 text-[11px] font-bold text-indigo-100">
+              <Scale className="w-3.5 h-3.5 text-indigo-300" />
+              Halollik · Ochiqlik · Shaffoflik
+            </div>
+
+            <p className="text-[11px] sm:text-xs font-semibold text-sky-200/90 tracking-wide mb-2">
+              Navoiy davlat universiteti
+            </p>
+            <h2 className="font-black tracking-tight leading-[1.12] mb-3">
+              <span className="block text-white text-[1.85rem] xl:text-[2.15rem]">
+                Komplayens nazorat
+              </span>
+              <span className="block landing-text-live text-[1.65rem] xl:text-[1.95rem] mt-0.5">
+                platformasiga kiring
+              </span>
+            </h2>
+            <p className="text-slate-400 text-sm leading-relaxed max-w-sm mx-auto">
+              So&apos;rovnomalar, murojaatlar va ochiqlik — «Komplayens nazorat»
+              tizimini boshqarish bo&apos;limining raqamli platformasi.
+            </p>
+          </div>
+
+          {/* Feature list */}
+          <ul className="space-y-2.5 w-full max-w-sm mt-1">
+            {FEATURE_POINTS.map(({ text, color, icon: Icon }) => (
+              <li
+                key={text}
+                className="flex items-start gap-3 px-3 py-2.5 rounded-2xl border border-white/[0.06] bg-white/[0.025] backdrop-blur-sm"
+              >
+                <span
+                  className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5"
+                  style={{
+                    background: `${color}14`,
+                    border: `1px solid ${color}28`,
+                  }}
+                >
+                  <Icon className="w-3.5 h-3.5" style={{ color }} />
+                </span>
+                <span className="text-[12px] text-slate-300 leading-snug pt-1.5">
+                  {text}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Mini stats */}
+          <div className="grid grid-cols-3 gap-2 w-full max-w-sm mt-1">
+            {[
+              { v: "100%", l: "Anonim", icon: EyeOff },
+              { v: "72s", l: "SLA", icon: Clock },
+              { v: "QR", l: "Ulashish", icon: QrCode },
+            ].map((s) => (
+              <div
+                key={s.l}
+                className="rounded-2xl border border-white/[0.07] bg-white/[0.03] px-2 py-2.5 text-center"
+              >
+                <s.icon className="w-3.5 h-3.5 text-indigo-300 mx-auto mb-1 opacity-80" />
+                <p className="text-sm font-black text-white tabular-nums">{s.v}</p>
+                <p className="text-[10px] text-slate-500 font-medium">{s.l}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 pt-4">
+          <p className="text-slate-600 text-[11px]">
+            © {new Date().getFullYear()} Bildir · NDU
+          </p>
+          <div className="flex items-center gap-3 text-[11px]">
+            <Link href="/" className="text-slate-500 hover:text-indigo-300 transition-colors">
+              Bosh sahifa
+            </Link>
+            <Link href="/privacy" className="text-slate-500 hover:text-indigo-300 transition-colors">
+              Maxfiylik
+            </Link>
+            <span className="inline-flex items-center gap-1 text-slate-600">
+              <Building2 className="w-3 h-3" />
+              Komplayens
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -80,6 +322,7 @@ export default function LoginPage() {
   const router  = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
   const isAuth  = useAuthStore((s) => s.isAuthenticated);
+  const { t } = useI18n();
 
   const [mode, setMode]       = useState<LoginMode>("oauth");
   const [loading, setLoading] = useState(false);
@@ -87,6 +330,19 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [form, setForm]       = useState({ login: "", password: "", email: "" });
   const [mounted, setMounted] = useState(false);
+
+  const TABS: {
+    key: LoginMode;
+    label: string;
+    icon: React.ElementType;
+    accent: string;
+    glow: string;
+  }[] = [
+    { key: "oauth", label: t("login.hemisOauth"), icon: Shield, accent: "#22d3ee", glow: "rgba(34,211,238,0.35)" },
+    { key: "sso_student", label: t("login.student"), icon: GraduationCap, accent: "#6366f1", glow: "rgba(99,102,241,0.35)" },
+    { key: "sso_teacher", label: t("login.teacher"), icon: Users, accent: "#a78bfa", glow: "rgba(167,139,250,0.35)" },
+    { key: "email", label: t("login.email"), icon: Mail, accent: "#fbbf24", glow: "rgba(251,191,36,0.3)" },
+  ];
 
   useEffect(() => { setMounted(true); }, []);
   const hasHydrated = useAuthStore((s) => s._hasHydrated);
@@ -168,103 +424,8 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-cosmos flex overflow-hidden">
 
-      {/* ═══ CHAP PANEL ════════════════════════════════════════════ */}
-      <div className="hidden lg:flex flex-col w-[46%] relative overflow-hidden">
-        {/* Deep bg */}
-        <div className="absolute inset-0"
-          style={{ background: "linear-gradient(160deg, #020816 0%, #060d1f 45%, #0c1235 75%, #04060f 100%)" }} />
-        <div className="absolute inset-0 grid-cosmos opacity-35" />
-
-        <StarField count={50} opacity={0.35} meteors={2} />
-
-        {/* Nebulalar */}
-        <div className="absolute rounded-full opacity-18 pointer-events-none"
-          style={{ width: 550, height: 550, background: "radial-gradient(circle, #6366f1, transparent 70%)", top: -120, left: -160, filter: "blur(80px)", animation: "nebulaFloat 18s ease-in-out infinite" }} />
-        <div className="absolute rounded-full opacity-13 pointer-events-none"
-          style={{ width: 420, height: 420, background: "radial-gradient(circle, #22d3ee, transparent 70%)", bottom: -60, right: -100, filter: "blur(70px)", animation: "nebulaFloat 22s ease-in-out infinite 5s" }} />
-        <div className="absolute rounded-full opacity-10 pointer-events-none"
-          style={{ width: 300, height: 300, background: "radial-gradient(circle, #a78bfa, transparent 70%)", top: "42%", right: "12%", filter: "blur(60px)", animation: "nebulaFloat 14s ease-in-out infinite 3s" }} />
-
-        {/* Floating info cards */}
-        {mounted && LEFT_CARDS.map(({ icon: Icon, label, sub, pos, color, dur }) => (
-          <div key={label} className="floating-badge absolute"
-            style={{
-              ...pos,
-              background: `${color}0a`,
-              border: `1px solid ${color}22`,
-              color: "#e2e8f0",
-              animation: `floatY ${dur} ease-in-out infinite`,
-            }}>
-            <div className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0"
-              style={{ background: `${color}16`, border: `1px solid ${color}28` }}>
-              <Icon className="w-3.5 h-3.5" style={{ color }} />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-white leading-tight">{label}</p>
-              <p className="text-[10px] text-slate-500 leading-tight">{sub}</p>
-            </div>
-          </div>
-        ))}
-
-        {/* Panel content */}
-        <div className="relative z-10 flex flex-col justify-between h-full px-12 py-10">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg, #6366f1, #4f46e5, #7c3aed)", boxShadow: "0 0 24px rgba(99,102,241,0.45)" }}>
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
-              <div className="absolute -inset-1 rounded-2xl opacity-20 blur-sm"
-                style={{ background: "linear-gradient(135deg, #818cf8, #7c3aed)" }} />
-            </div>
-            <div>
-              <span className="font-bold text-xl text-white">OsiyoNigohi</span>
-            </div>
-          </div>
-
-          {/* Orbital visualization */}
-          <div className="flex flex-col items-center gap-6">
-            <OrbitalViz />
-            <div className="text-center">
-              <div className="badge-aurora mb-5 mx-auto w-fit">
-                <Sparkles className="w-3.5 h-3.5" />
-                Kosmik sifatdagi ta&apos;lim
-              </div>
-              <h2 className="font-black leading-none mb-4 tracking-tight" style={{ fontSize: "2.8rem" }}>
-                <span className="text-white">Ta&apos;limni</span>
-                <br />
-                <span className="aurora-text" style={{ paddingBottom: 4 }}>yangi orbitaga</span>
-                <br />
-                <span className="text-white">olib chiqing</span>
-              </h2>
-              <p className="text-slate-400 text-sm leading-relaxed max-w-sm mx-auto">
-                Blockchain kafolati, sun&apos;iy intellekt va real-vaqt nazorat bilan
-                imtihon jarayonini butunlay o&apos;zgartiring.
-              </p>
-            </div>
-
-            <div className="space-y-2.5 w-full max-w-xs">
-              {[
-                { text: "HEMIS tizimi bilan to'liq integratsiya",   color: "#22d3ee" },
-                { text: "AES-256 shifrlangan savol havzasi",         color: "#a78bfa" },
-                { text: "Hyperledger Fabric blockchain audit trail",  color: "#34d399" },
-                { text: "GPT-4 tomonidan avtomatik baholash",         color: "#fbbf24" },
-              ].map(({ text, color }) => (
-                <div key={text} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
-                    style={{ background: `${color}16`, border: `1px solid ${color}28` }}>
-                    <CheckCircle className="w-3 h-3" style={{ color }} />
-                  </div>
-                  <span className="text-slate-300 text-xs">{text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <p className="text-slate-700 text-xs">© 2026 OsiyoNigohi · NSPI</p>
-        </div>
-      </div>
+      {/* ═══ CHAP PANEL — Bildir / NDU Komplayens ════════════════ */}
+      <LoginInfoPanel mounted={mounted} />
 
       {/* ═══ O'NG PANEL ════════════════════════════════════════════ */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 py-10 relative">
@@ -274,29 +435,37 @@ export default function LoginPage() {
         <div className="absolute pointer-events-none rounded-full opacity-[0.07]"
           style={{ width: 600, height: 600, background: "radial-gradient(circle, #6366f1, transparent 70%)", top: "50%", left: "50%", transform: "translate(-50%, -50%)", filter: "blur(90px)" }} />
 
-        {/* Mobile back */}
-        <button onClick={() => router.push("/")}
-          className="lg:hidden absolute top-6 left-6 flex items-center gap-1.5 text-sm text-slate-500 hover:text-white transition-colors z-10">
-          <ChevronLeft className="w-4 h-4" /> Bosh sahifa
-        </button>
+        {/* Mobile back + language */}
+        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
+          <button onClick={() => router.push("/")}
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-white transition-colors">
+            <ChevronLeft className="w-4 h-4" /> {t("login.backHome")}
+          </button>
+          <LanguageSwitcher />
+        </div>
 
         <div className="relative z-10 w-full max-w-[420px]">
 
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center justify-center gap-3 mb-10">
+          <div className="lg:hidden flex items-center justify-center gap-3 mb-10 mt-8">
             <div className="w-10 h-10 rounded-2xl flex items-center justify-center"
               style={{ background: "linear-gradient(135deg, #6366f1, #7c3aed)", boxShadow: "0 0 20px rgba(99,102,241,0.4)" }}>
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg">OsiyoNigohi</span>
+            <div>
+              <p className="font-bold text-lg text-white leading-none">{t("brand")}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">{t("brandSub")}</p>
+            </div>
           </div>
 
           {/* Title */}
           <div className="mb-7">
             <h1 className="text-3xl font-extrabold text-white mb-1.5 tracking-tight">
-              Xush kelibsiz
+              {t("login.welcome")}
             </h1>
-            <p className="text-slate-500 text-sm">Tizimga kirish usulini tanlang</p>
+            <p className="text-slate-500 text-sm">
+              {t("login.choose")}
+            </p>
           </div>
 
           {/* ── Tab selector ─────────────────────────────────────── */}
@@ -501,7 +670,7 @@ export default function LoginPage() {
                 <label className="label-premium">Email manzil</label>
                 <div className="input-icon-wrap">
                   <Mail className="input-icon-prefix w-4 h-4" />
-                  <input type="email" placeholder="admin@osiyonigohi.uz"
+                  <input type="email" placeholder="admin@ndu.uz"
                     value={form.email} onChange={f("email")} required
                     className="input-premium" style={{ paddingLeft: 44 }} />
                 </div>

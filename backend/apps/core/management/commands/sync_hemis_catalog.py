@@ -74,12 +74,18 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--university-code", default="NDU")
-        parser.add_argument("--university-name", default="Navoiy Davlat Universiteti")
+        parser.add_argument("--university-name", default="Navoiy davlat universiteti")
         parser.add_argument("--only-subjects", action="store_true")
         parser.add_argument("--mock", action="store_true")
 
     def handle(self, *args, **options):
-        use_mock = options["mock"] or MOCK or not TOKEN
+        # Mock faqat aniq --mock yoki env; token yo'qligi avtomatik mock qilmasin (xato bersin)
+        use_mock = bool(options["mock"]) or bool(MOCK)
+        if not use_mock and not TOKEN:
+            self.stdout.write(self.style.ERROR(
+                "HEMIS_BACKEND_TOKEN bo'sh. Real sync uchun token kerak, yoki --mock ishlating."
+            ))
+            return
 
         # ── Sync log yozuvi yaratish ─────────────────────────────
         sync_log = HemisSyncLog.objects.create(
@@ -113,10 +119,20 @@ class Command(BaseCommand):
                 defaults={
                     "name":       options["university_name"],
                     "short_name": options["university_code"],
-                    "domain":     "student.nspi.uz",
+                    "domain":     "",
                     "city":       "Navoiy",
                 },
             )
+            # Nom/kod yangilanishi (masalan NSPI → NDU brending)
+            upd = []
+            if uni.name != options["university_name"]:
+                uni.name = options["university_name"]
+                upd.append("name")
+            if uni.short_name != options["university_code"]:
+                uni.short_name = options["university_code"]
+                upd.append("short_name")
+            if upd:
+                uni.save(update_fields=upd)
             self.stdout.write(f"  Universitet {'yaratildi' if created else 'mavjud'}: {uni}")
 
             if not options["only_subjects"]:
@@ -502,24 +518,45 @@ class Command(BaseCommand):
 
             synced_codes.add((fac.pk, code))
 
-            subj, created = Subject.objects.update_or_create(
-                faculty=fac, code=code,
-                defaults={
-                    "name":            name,
-                    "hemis_course_id": str(s.get("id") or ""),
-                    "credit_hours":    int(s.get("credit_hours") or 3),
-                    "is_active":       True,
-                    "synced_at":       now,
-                    "is_archived":     False,
-                    "archived_at":     None,
-                },
-            )
-            if created:
+            # update_or_create select_for_update ishlatadi — SQLite da lock beradi.
+            # get + save / create xavfsizroq.
+            hemis_id = str(s.get("id") or "")
+            credit = int(s.get("credit_hours") or 3)
+            subj = Subject.objects.filter(faculty=fac, code=code).first()
+            if subj is None:
+                Subject.objects.create(
+                    faculty=fac,
+                    code=code,
+                    name=name,
+                    hemis_course_id=hemis_id,
+                    credit_hours=credit,
+                    is_active=True,
+                    synced_at=now,
+                    is_archived=False,
+                )
                 saved += 1
             else:
-                updated += 1
+                uf = ["synced_at"]
+                if subj.name != name:
+                    subj.name = name
+                    uf.append("name")
+                if subj.hemis_course_id != hemis_id:
+                    subj.hemis_course_id = hemis_id
+                    uf.append("hemis_course_id")
+                if subj.credit_hours != credit:
+                    subj.credit_hours = credit
+                    uf.append("credit_hours")
+                if not subj.is_active:
+                    subj.is_active = True
+                    uf.append("is_active")
                 if subj.is_archived:
+                    subj.is_archived = False
+                    subj.archived_at = None
+                    uf += ["is_archived", "archived_at"]
                     restored += 1
+                subj.synced_at = now
+                subj.save(update_fields=uf)
+                updated += 1
 
         # Arxivlash — bu syncda ko'rilmagan aktiv fanlar (faqat shu university)
         fac_ids = set(faculties_by_code[c].pk for c in faculties_by_code)

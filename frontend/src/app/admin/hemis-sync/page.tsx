@@ -105,9 +105,10 @@ function StatCard({ label, value, icon: Icon, color }: { label: string; value: n
 }
 
 const INIT_CONFIG = {
-  university_code:  "NSPI",
-  university_name:  "Nukus Davlat Pedagogika Instituti",
-  mock:             true,
+  university_code:  "NDU",
+  university_name:  "Navoiy davlat universiteti",
+  // Default REAL HEMIS — mock yoqilsa demo katalog aralashib ketadi
+  mock:             false,
   sync_faculties:   true,
   sync_specialties: true,
   sync_groups:      true,
@@ -258,25 +259,47 @@ export default function AdminHemisSyncPage() {
                     <label className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Universitet kodi</label>
                     <input value={config.university_code} disabled={isRunning}
                       onChange={(e) => setConfig(c => ({ ...c, university_code: e.target.value.toUpperCase() }))}
-                      className="input-dark w-full text-sm font-mono uppercase" placeholder="NSPI" />
+                      className="input-dark w-full text-sm font-mono uppercase" placeholder="NDU" />
                   </div>
                   <div>
                     <label className="text-xs text-slate-400 uppercase tracking-wide mb-1.5 block">Universitet nomi</label>
                     <input value={config.university_name} disabled={isRunning}
                       onChange={(e) => setConfig(c => ({ ...c, university_name: e.target.value }))}
-                      className="input-dark w-full text-sm" placeholder="Nukus Davlat Pedagogika Instituti" />
+                      className="input-dark w-full text-sm" placeholder="Navoiy davlat universiteti" />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between p-3 rounded-xl border border-white/10 bg-white/[0.03]">
-                  <div>
-                    <p className="text-sm font-medium text-white">Mock rejimi</p>
-                    <p className="text-xs text-slate-500">HEMIS API o'rniga test ma'lumotlar</p>
+                <div className={`p-3 rounded-xl border space-y-2 ${
+                  config.mock
+                    ? "border-amber-500/40 bg-amber-500/10"
+                    : "border-white/10 bg-white/[0.03]"
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-white">Mock rejimi</p>
+                      <p className="text-xs text-slate-500">
+                        {config.mock
+                          ? "TEST (demo) ma'lumot — real HEMIS ga aralashmasin"
+                          : "Real HEMIS API dan yuklash"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConfig((c) => ({ ...c, mock: !c.mock }))}
+                      disabled={isRunning}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${config.mock ? "bg-amber-500" : "bg-emerald-500"}`}
+                    >
+                      <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${config.mock ? "left-0.5" : "left-5"}`} />
+                    </button>
                   </div>
-                  <button onClick={() => setConfig(c => ({ ...c, mock: !c.mock }))} disabled={isRunning}
-                    className={`relative w-11 h-6 rounded-full transition-colors ${config.mock ? "bg-amber-500" : "bg-emerald-500"}`}>
-                    <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${config.mock ? "left-0.5" : "left-5"}`} />
-                  </button>
+                  {config.mock && (
+                    <p className="text-[11px] text-amber-300/90 leading-relaxed flex items-start gap-1.5">
+                      <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                      Mock yoqilganda demo fakultet/guruhlar yaratiladi. Production da o&apos;chirib qo&apos;ying.
+                      Demo aralashib qolsa: backendda{" "}
+                      <code className="text-amber-200">python manage.py purge_demo_catalog</code>
+                    </p>
+                  )}
                 </div>
 
                 <div>

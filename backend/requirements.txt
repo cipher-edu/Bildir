@@ -4,16 +4,21 @@ django-cors-headers==4.6.0
 django-filter==24.3
 djangorestframework-simplejwt==5.3.1
 PyJWT==2.10.1
-# psycopg[binary]>=3.2.10  # PostgreSQL (production) — SQLite uchun shart emas
+psycopg[binary]>=3.2.10
 python-decouple==3.8
 requests==2.32.3
 Pillow>=11.1.0
+qrcode[pil]>=8.0
 drf-spectacular==0.27.2
 django-jazzmin==3.0.1
 django-ratelimit==4.1.0
 cryptography==44.0.0
 python-json-logger==2.0.7
 pydantic>=2.10.3
+gunicorn==23.0.0
+whitenoise==6.8.2
+redis==5.2.1
 pytest==8.3.4
 pytest-django==4.9.0
 factory-boy==3.3.1
+openpyxl==3.1.5

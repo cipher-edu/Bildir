@@ -27,7 +27,7 @@ export default function GlobalError({
               <GraduationCap style={{ width: 18, height: 18, color: "white" }} />
             </div>
             <span style={{ fontWeight: 700, fontSize: 16, color: "white" }}>
-              OsiyoNigohi
+              Bildir
             </span>
           </div>
 

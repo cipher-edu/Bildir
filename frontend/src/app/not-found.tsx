@@ -31,7 +31,7 @@ export default function NotFound() {
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <span className="font-bold text-lg text-white">
-            OsiyoNigohi
+            Bildir
           </span>
         </div>
 

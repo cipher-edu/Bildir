@@ -248,29 +248,250 @@ export interface PracticeAnswerItem {
 
 // ── Surveys ───────────────────────────────────────────────────
 
-export interface Survey {
-  id:             string;
-  title:          string;
-  description:    string;
-  trigger:        "post_exam" | "standalone";
-  exam:           string | null;
-  exam_title:     string | null;
-  is_active:      boolean;
-  question_count: number;
-  created_at:     string;
+export type SurveyStatus = "draft" | "published" | "closed" | "archived";
+export type SurveyAudience = "students" | "staff" | "all";
+export type SurveyPrivacyMode = "open" | "anonymous";
+export type SurveyStatsLevel = "none" | "coarse" | "detailed";
+export type SurveyQType =
+  | "single" | "multiple" | "text" | "textarea"
+  | "rating" | "nps" | "likert";
+
+export interface SurveyOption {
+  id?:    string;
+  text:   string;
+  order?: number;
 }
 
 export interface SurveyQuestion {
-  id:       string;
-  order:    number;
-  text:     string;
-  q_type:   "rating" | "text" | "choice";
-  options:  string[];
-  required: boolean;
+  id:        string;
+  order:     number;
+  q_type:    SurveyQType;
+  text:      string;
+  help_text: string;
+  required:  boolean;
+  options:   SurveyOption[];
+  settings:  Record<string, unknown>;
+  created_at?: string;
+}
+
+export interface Survey {
+  id:                  string;
+  title:               string;
+  description:         string;
+  status:              SurveyStatus;
+  audience:            SurveyAudience;
+  privacy_mode:        SurveyPrivacyMode;
+  stats_level:         SurveyStatsLevel;
+  min_n_for_breakdown: number;
+  store_group_meta:    boolean;
+  track_participation: boolean;
+  start_at:            string | null;
+  end_at:              string | null;
+  study_years:         number[];
+  public_path:         string;
+  public_url:          string;
+  qr_image:            string | null;
+  published_at:        string | null;
+  closed_at:           string | null;
+  created_at:          string;
+  updated_at:          string;
+  question_count?:     number;
+  response_count?:     number;
+  created_by_name?:    string | null;
+  already_submitted?:  boolean;
 }
 
 export interface SurveyDetail extends Survey {
-  questions:  SurveyQuestion[];
+  questions:   SurveyQuestion[];
+  faculties:   string[];
+  specialties: string[];
+  groups:      string[];
+  university?: string | null;
+  created_by?: string | null;
+}
+
+export interface SurveyTake {
+  id:               string;
+  title:            string;
+  description:      string;
+  privacy_mode:     SurveyPrivacyMode;
+  start_at:         string | null;
+  end_at:           string | null;
+  status:           SurveyStatus;
+  public_url:       string;
+  questions:        SurveyQuestion[];
+  already_submitted: boolean;
+}
+
+export interface SurveyParticipation {
+  id:            string;
+  user:          string;
+  user_email:    string;
+  user_name:     string | null;
+  status:        "started" | "submitted";
+  started_at:    string;
+  submitted_day: string | null;
+}
+
+export interface SurveyResults {
+  survey_id:               string;
+  title?:                  string;
+  status?:                 SurveyStatus;
+  privacy_mode:            SurveyPrivacyMode;
+  track_participation?:    boolean;
+  response_count:          number;
+  participation_submitted: number;
+  participation_started?:  number;
+  question_count?:         number;
+  questions: Array<{
+    question_id:   string;
+    text:          string;
+    q_type:        string;
+    count:         number;
+    distribution:  Record<string, number>;
+    distribution_labeled?: Array<{
+      key: string;
+      label: string;
+      value: number;
+      pct: number;
+    }>;
+    average:       number | null;
+    texts_sample?: string[];
+  }>;
+  meta_breakdown:      Record<string, Record<string, number>>;
+  dimensions?: Record<string, {
+    label: string;
+    items: Array<{
+      key: string;
+      label: string;
+      value: number;
+      pct: number;
+      average?: number;
+    }>;
+    timeline?: {
+      series_keys: string[];
+      points: Array<{ date: string; values: Record<string, number> }>;
+    };
+  }>;
+  stats_level?: string;
+  min_n_for_breakdown: number;
+  timeline?: Array<{ date: string; count: number }>;
+}
+
+// ── Yangiliklar ───────────────────────────────────────────────
+
+export type NewsCategory =
+  | "announcement"
+  | "event"
+  | "regulation"
+  | "anti_corruption"
+  | "general";
+
+export type NewsStatus = "draft" | "published" | "archived";
+
+export type I18nMap = Partial<Record<"uz" | "ru" | "en" | "kaa", string>>;
+
+export interface NewsArticle {
+  id: string;
+  title: string;
+  title_i18n?: I18nMap;
+  slug: string;
+  summary: string;
+  summary_i18n?: I18nMap;
+  body?: string;
+  body_i18n?: I18nMap;
+  cover?: string | null;
+  cover_url?: string | null;
+  category: NewsCategory;
+  category_label?: string;
+  status: NewsStatus;
+  status_label?: string;
+  is_featured: boolean;
+  is_pinned: boolean;
+  published_at?: string | null;
+  author?: string | null;
+  author_name?: string | null;
+  meta_title?: string;
+  meta_title_i18n?: I18nMap;
+  meta_description?: string;
+  meta_description_i18n?: I18nMap;
+  locale?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// ── Office / Murojaat ─────────────────────────────────────────
+
+export interface ResponsiblePerson {
+  id: string;
+  photo?: string | null;
+  photo_url?: string | null;
+  first_name: string;
+  last_name: string;
+  middle_name?: string;
+  full_name?: string;
+  position: string;
+  department?: string;
+  academic_title?: string;
+  phone?: string;
+  email?: string;
+  office_room?: string;
+  reception_hours?: string;
+  biography?: string;
+  responsibilities?: string;
+  extra_info?: string;
+  order: number;
+  is_active: boolean;
+  is_public: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AppealStatus = "pending" | "in_progress" | "answered" | "closed";
+export type AppealCategory =
+  | "general"
+  | "academic"
+  | "social"
+  | "technical"
+  | "complaint"
+  | "suggestion"
+  | "other";
+
+export interface AppealAttachment {
+  id: string;
+  kind?: "user" | "admin";
+  original_name: string;
+  size: number;
+  content_type: string;
+  file_url: string | null;
+  created_at: string;
+}
+
+export interface Appeal {
+  id: string;
+  user?: string;
+  user_email?: string;
+  user_name?: string;
+  subject: string;
+  body: string;
+  category: AppealCategory;
+  category_display?: string;
+  status: AppealStatus;
+  status_display?: string;
+  answer_text?: string;
+  answered_at?: string | null;
+  answered_by?: string | null;
+  answered_by_name?: string | null;
+  answered_late?: boolean;
+  answered_late_flag?: boolean;
+  is_overdue?: boolean;
+  hours_left?: number | null;
+  sla_deadline?: string;
+  sla_hours?: number;
+  admin_note?: string;
+  attachments?: AppealAttachment[];
+  answer_attachments?: AppealAttachment[];
+  created_at: string;
   updated_at: string;
 }
 

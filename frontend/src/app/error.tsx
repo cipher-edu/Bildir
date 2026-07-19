@@ -54,7 +54,7 @@ export default function ErrorPage({
           <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center">
             <GraduationCap className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-white">OsiyoNigohi</span>
+          <span className="font-bold text-white">Bildir</span>
         </div>
 
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3">

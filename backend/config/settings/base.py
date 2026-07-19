@@ -24,14 +24,23 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_filters",
     "drf_spectacular",
-    # Apps
+    # Apps (domen/mikroservis chegaralari)
     "apps.core",
     "apps.users",
+    "apps.surveys",
+    "apps.office",
+    "apps.news",
+    "apps.compliance",
 ]
+
+# ---- Surveys (xavfsizlik kalitlari — production da Vault/env) ----
+# SURVEY_ENCRYPTION_KEY / SURVEY_HMAC_KEY / SURVEY_TOKEN_KEY — base64 yoki raw
+# Berilmasa SECRET_KEY dan hosila qilinadi (faqat dev).
 
 MIDDLEWARE = [
     "utils.request_id_middleware.RequestIDMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -62,19 +71,52 @@ TEMPLATES = [
 WSGI_APPLICATION = "config.wsgi.application"
 
 # ---- Database -----------------------------------------------
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+# POSTGRES_HOST berilsa → PostgreSQL (Docker/production)
+# aks holda → SQLite (faqat lokal tezkor dev)
+POSTGRES_HOST = config("POSTGRES_HOST", default="")
 
-# ---- Cache (local memory — Redis o'rnatmasdan ishlaydi) ------
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+if POSTGRES_HOST:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": config("POSTGRES_DB", default="auth_starter"),
+            "USER": config("POSTGRES_USER", default="auth"),
+            "PASSWORD": config("POSTGRES_PASSWORD", default="auth"),
+            "HOST": POSTGRES_HOST,
+            "PORT": config("POSTGRES_PORT", default="5432"),
+            "CONN_MAX_AGE": config("DB_CONN_MAX_AGE", default=60, cast=int),
+            "OPTIONS": {
+                "connect_timeout": 10,
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            "OPTIONS": {"timeout": 60},
+            "ATOMIC_REQUESTS": False,
+        }
+    }
+
+# ---- Cache --------------------------------------------------
+REDIS_URL = config("REDIS_URL", default="")
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
+
+REDIS_TIMER_URL = config("REDIS_TIMER_URL", default=REDIS_URL or "redis://127.0.0.1:6379/5")
 
 # ---- Auth ---------------------------------------------------
 AUTH_USER_MODEL = "users.User"
@@ -163,6 +205,14 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 # ---- Internationalization -----------------------------------
 LANGUAGE_CODE = "uz"

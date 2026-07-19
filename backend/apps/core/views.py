@@ -216,18 +216,34 @@ class StudyGroupListView(APIView):
     def get(self, request):
         specialty_id = request.query_params.get("specialty_id")
         faculty_id   = request.query_params.get("faculty_id")
+        faculty_ids_raw = request.query_params.get("faculty_ids", "")
+        faculty_id_list = [x.strip() for x in faculty_ids_raw.split(",") if x.strip()]
         search       = _clean_search(request.query_params.get("search", ""))
-        qs = StudyGroup.objects.filter(is_active=True, is_archived=False).select_related("specialty")
+        qs = StudyGroup.objects.filter(is_active=True, is_archived=False).select_related(
+            "specialty", "specialty__faculty"
+        )
         if specialty_id:
             qs = qs.filter(specialty_id=specialty_id)
+        elif faculty_id_list:
+            qs = qs.filter(specialty__faculty_id__in=faculty_id_list)
         elif faculty_id:
             qs = qs.filter(specialty__faculty_id=faculty_id)
         if search:
             qs = qs.filter(name__icontains=search)
 
         if request.query_params.get("compact") == "true":
-            items = qs.values("id", "name", "study_year")[:2000]
-            return Response({"success": True, "data": list(items)})
+            # So'rovnoma targetlash UI: fakultet → guruh zanjiri
+            items = []
+            for g in qs.order_by("study_year", "name")[:3000]:
+                items.append({
+                    "id": str(g.id),
+                    "name": g.name,
+                    "study_year": g.study_year,
+                    "specialty_id": str(g.specialty_id) if g.specialty_id else None,
+                    "specialty_name": g.specialty.name if g.specialty_id else None,
+                    "faculty_id": str(g.specialty.faculty_id) if g.specialty_id else None,
+                })
+            return Response({"success": True, "data": items})
 
         page      = _safe_int(request.query_params.get("page"), 1, minimum=1)
         page_size = _safe_int(request.query_params.get("page_size"), 50, minimum=1, maximum=200)
@@ -367,7 +383,7 @@ class HemisSyncView(APIView):
 
     Body:
       {
-        "university_code": "NSPI",
+        "university_code": "NDU",
         "university_name": "...",
         "sync_faculties":  true,
         "sync_specialties": true,
@@ -409,12 +425,22 @@ class HemisSyncView(APIView):
                     "data": {"sync_id": active_sid}
                 }, status=409)
 
-        uni_code      = request.data.get("university_code", "NDU").strip().upper() or "NDU"
-        uni_name      = request.data.get("university_name",
-                                         "Navoiy Davlat Universiteti").strip()
+        uni_code      = (request.data.get("university_code") or "NDU").strip().upper() or "NDU"
+        uni_name      = (request.data.get("university_name") or
+                         "Navoiy davlat universiteti").strip()
         from django.conf import settings as _dj_settings
-        _env_mock = getattr(_dj_settings, "HEMIS_MOCK_MODE", True)
-        use_mock      = bool(request.data.get("mock", _env_mock))
+        _env_mock = getattr(_dj_settings, "HEMIS_MOCK_MODE", False)
+        # Frontend "mock" yuborsa — faqat aniq True/False
+        if "mock" in request.data:
+            use_mock = bool(request.data.get("mock"))
+        else:
+            use_mock = bool(_env_mock)
+        # Mock demo ma'lumot real universitet (NDU) ga aralashmasin
+        if use_mock:
+            if uni_code in ("", "NSPI", "NDU") or not uni_code.startswith("DEMO"):
+                uni_code = "DEMO"
+            if not uni_name or "Nukus" in uni_name or "Navoiy" in uni_name:
+                uni_name = "DEMO (Mock katalog)"
         sync_fac      = bool(request.data.get("sync_faculties", True))
         sync_spec     = bool(request.data.get("sync_specialties", True))
         sync_grp      = bool(request.data.get("sync_groups", True))
