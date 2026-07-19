@@ -1,8 +1,6 @@
 /**
- * OsiyoNigohi — Auth Store (Zustand)
- *
- * Tokenlar httpOnly cookie larda saqlanadi (server tomonidan).
- * Store faqat user ma'lumotlari va autentifikatsiya holatini boshqaradi.
+ * Auth store — tokenlar localStorage da SAQLANMAYDI (XSS himoya).
+ * Access: faqat memory; refresh/access asosan httpOnly cookie (backend Set-Cookie).
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -10,16 +8,19 @@ import { User } from "@/types";
 
 interface AuthState {
   user: User | null;
+  /** Faqat xotira — persist qilinmaydi */
   accessToken: string | null;
+  /** Legacy; cookie asosiy. Persist qilinmaydi */
   refreshToken: string | null;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
 
-  setAuth: (user: User, access: string, refresh: string) => void;
-  setAccessToken: (token: string) => void;
+  setAuth: (user: User, access?: string | null, refresh?: string | null) => void;
+  setAccessToken: (token: string | null) => void;
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
   setHasHydrated: (v: boolean) => void;
+  setUserOnly: (user: User | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -33,14 +34,46 @@ export const useAuthStore = create<AuthState>()(
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
 
-      setAuth: (user, access, refresh) => {
-        set({ user, accessToken: access, refreshToken: refresh, isAuthenticated: true });
+      setAuth: (user, access = null, refresh = null) => {
+        set({
+          user,
+          accessToken: access || null,
+          refreshToken: refresh || null,
+          isAuthenticated: true,
+        });
       },
+
+      setUserOnly: (user) =>
+        set({
+          user,
+          isAuthenticated: !!user,
+        }),
 
       setAccessToken: (token) => set({ accessToken: token }),
 
       logout: () => {
-        set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          isAuthenticated: false,
+        });
+        // Eski localStorage tokenlarini tozalash (migratsiya)
+        try {
+          if (typeof window !== "undefined") {
+            const raw = localStorage.getItem("osiyonigohi-auth");
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (parsed?.state) {
+                delete parsed.state.accessToken;
+                delete parsed.state.refreshToken;
+                localStorage.setItem("osiyonigohi-auth", JSON.stringify(parsed));
+              }
+            }
+          }
+        } catch {
+          /* ignore */
+        }
       },
 
       updateUser: (updates) =>
@@ -50,14 +83,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "osiyonigohi-auth",
+      // Faqat user + isAuthenticated — tokenlar localStorage da emas
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
+        // Eski saqlangan tokenlarni xotiradan ham tozalash
+        if (state) {
+          state.accessToken = null;
+          state.refreshToken = null;
+        }
       },
     }
   )

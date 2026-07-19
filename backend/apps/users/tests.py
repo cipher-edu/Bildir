@@ -119,16 +119,19 @@ class TestLogoutView:
     def test_logout_with_refresh_token(self, auth_client, student):
         from rest_framework_simplejwt.tokens import RefreshToken
         refresh = str(RefreshToken.for_user(student))
-        r = auth_client.post(self.url, {"refresh": refresh})
+        access = str(RefreshToken.for_user(student).access_token)
+        r = auth_client.post(self.url, {"refresh": refresh, "access": access})
         assert r.status_code in (
             status.HTTP_200_OK, status.HTTP_204_NO_CONTENT, status.HTTP_205_RESET_CONTENT
         )
 
-    def test_logout_without_token_rejected(self, auth_client):
+    def test_logout_without_body_ok_when_authenticated(self, auth_client):
+        """Cookie/header access yetarli; refresh body majburiy emas."""
         r = auth_client.post(self.url, {})
         assert r.status_code in (
-            status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_200_OK  # some impls silently succeed
+            status.HTTP_200_OK,
+            status.HTTP_204_NO_CONTENT,
+            status.HTTP_205_RESET_CONTENT,
         )
 
 

@@ -51,6 +51,10 @@ async function proxy(
     headers.set(key, value);
   });
 
+  // Cookie (httpOnly JWT) brauzerdan proksi orqali backend ga
+  const cookie = req.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
+
   const init: RequestInit = {
     method: req.method,
     headers,
@@ -85,8 +89,22 @@ async function proxy(
       ) {
         return;
       }
+      // Set-Cookie: bir nechta bo'lishi mumkin — getSetCookie (Node 18+)
+      if (k === "set-cookie") return;
       out.set(key, value);
     });
+
+    // httpOnly JWT cookie larni brauzerga o'tkazish
+    const anyHeaders = res.headers as Headers & {
+      getSetCookie?: () => string[];
+    };
+    const setCookies =
+      typeof anyHeaders.getSetCookie === "function"
+        ? anyHeaders.getSetCookie()
+        : [];
+    for (const c of setCookies) {
+      out.append("set-cookie", c);
+    }
 
     const buf = await res.arrayBuffer();
     return new NextResponse(buf, { status: res.status, headers: out });

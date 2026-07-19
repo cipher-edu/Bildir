@@ -12,12 +12,20 @@ ALLOWED_HOSTS = config(
     cast=Csv(),
 )
 
-CORS_ALLOWED_ORIGINS = config(
-    "CORS_ALLOWED_ORIGINS",
-    default="http://localhost:3000,http://127.0.0.1:3000",
-    cast=Csv(),
+from utils.cors_security import sanitize_cors_origins
+
+CORS_ALLOWED_ORIGINS = sanitize_cors_origins(
+    list(
+        config(
+            "CORS_ALLOWED_ORIGINS",
+            default="http://localhost:3000,http://127.0.0.1:3000",
+            cast=Csv(),
+        )
+    ),
+    allow_credentials=True,
 )
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3000",

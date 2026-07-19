@@ -402,6 +402,26 @@ def submit_response(
     meta = build_response_meta(survey, user)
     bucket = hour_bucket()
 
+    # ── Race-safe claim: birinchi muvaffaqiyatli lock egasi yutadi ──
+    # select_for_update ostida conditional UPDATE — parallel submit 409
+    unlink_user = not survey.track_participation
+    claim_fields: dict[str, Any] = {
+        "token_used": True,
+        "token_hash": "",
+        "status": SurveyParticipation.Status.SUBMITTED,
+        "submitted_day": timezone.localdate(),
+        "participant_key": pkey,
+    }
+    if unlink_user:
+        claim_fields["user"] = None
+    claimed = SurveyParticipation.objects.filter(
+        pk=part.pk,
+        status=SurveyParticipation.Status.STARTED,
+        token_used=False,
+    ).update(**claim_fields)
+    if claimed != 1:
+        raise SurveyServiceError("Siz allaqachon ishtirok etgansiz.", 409)
+
     # Seal payload — respondent faqat open rejimda hash ichida
     seal_body: dict[str, Any] = {
         "survey_id": str(survey.id),
@@ -431,22 +451,6 @@ def submit_response(
     )
     # to'g'ridan-to'g'ri insert — save() sealed check create uchun OK
     response.save()
-
-    part.token_used = True
-    part.token_hash = ""  # token izini o'chirish
-    part.status = SurveyParticipation.Status.SUBMITTED
-    part.submitted_day = timezone.localdate()
-    part.participant_key = pkey
-    # DB-level anonim: ishtirokchi ro'yxati o'chirilgan so'rovnomada user FK ni olib tashlash
-    unlink_user = not survey.track_participation
-    if unlink_user:
-        part.user = None
-    part.save(
-        update_fields=[
-            "token_used", "token_hash", "status", "submitted_day",
-            "participant_key", "user",
-        ]
-    )
 
     # Anonim: response ↔ participation FK yo'q
     logger.info(
@@ -679,10 +683,14 @@ def aggregate_results(survey: Survey) -> dict:
             labeled.sort(key=lambda x: -x["value"])
         st["distribution_labeled"] = labeled
 
-    # Admin dashboard: shaxs unlink qilingan; kesimlarni to'liq ko'rsatamiz (min=1).
-    # min_n_for_breakdown faqat ma'lumot sifatida qaytariladi.
-    min_n = survey.min_n_for_breakdown or 10
-    display_min = 1
+    # K-anonimlik: kesimda n < k bo'lsa yashiriladi (de-anonymization himoyasi).
+    # Anonim so'rovnomada minimal k majburiy; open rejimda ham sozlama qo'llanadi.
+    configured = int(survey.min_n_for_breakdown or 10)
+    if survey.privacy_mode == Survey.PrivacyMode.ANONYMOUS:
+        display_min = max(5, configured)
+    else:
+        display_min = max(1, configured)
+    min_n = display_min
 
     def _counter_to_labeled(counter: Counter, min_count: int, score_sum=None, score_n=None):
         items = []

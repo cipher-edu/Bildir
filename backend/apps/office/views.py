@@ -34,16 +34,36 @@ def _err(detail, code=400):
 
 
 def _validate_upload(f):
-    name = getattr(f, "name", "") or "file"
-    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    if ext not in ALLOWED_EXT:
-        return f"Ruxsat etilmagan format: .{ext}. Ruxsat: {', '.join(sorted(ALLOWED_EXT))}"
-    size = getattr(f, "size", 0) or 0
-    if size > MAX_FILE_BYTES:
-        return f"Fayl juda katta ({size // (1024*1024)} MB). Maksimal 10 MB."
-    if size == 0:
-        return "Bo'sh fayl."
+    """
+    Extension + magic-byte + rasm re-encode (utils.upload_security).
+    Returns error string yoki None. Muvaffaqiyatda f o'rniga sanitize qilingan fayl
+    request._sanitized_uploads ga yoziladi.
+    """
+    from utils.upload_security import validate_and_sanitize_upload
+
+    err, meta = validate_and_sanitize_upload(
+        f, allowed_ext=set(ALLOWED_EXT), max_bytes=MAX_FILE_BYTES
+    )
+    if err:
+        return err
+    # caller attachment yaratishda meta["file"] ishlatadi
+    if not hasattr(f, "_upload_meta"):
+        try:
+            f._upload_meta = meta  # type: ignore[attr-defined]
+        except Exception:
+            pass
     return None
+
+
+def _sanitized_file(f):
+    meta = getattr(f, "_upload_meta", None)
+    if isinstance(meta, dict) and meta.get("file") is not None:
+        return meta["file"], meta
+    return f, {
+        "content_type": getattr(f, "content_type", "") or "",
+        "original_name": getattr(f, "name", "") or "file",
+        "sanitized": False,
+    }
 
 
 # ── Mas'ul shaxslar ───────────────────────────────────────────
@@ -134,10 +154,12 @@ class MyAppealsView(APIView):
         if len(files) > 5:
             return _err("Maksimal 5 ta fayl biriktirish mumkin.", 400)
 
+        safe_files = []
         for f in files:
             err = _validate_upload(f)
             if err:
                 return _err(err, 400)
+            safe_files.append(_sanitized_file(f))
 
         appeal = Appeal.objects.create(
             user=request.user,
@@ -146,14 +168,14 @@ class MyAppealsView(APIView):
             category=ser.validated_data.get("category") or Appeal.Category.GENERAL,
             status=Appeal.Status.PENDING,
         )
-        for f in files:
+        for sf, meta in safe_files:
             AppealAttachment.objects.create(
                 appeal=appeal,
                 kind=AppealAttachment.Kind.USER,
-                file=f,
-                original_name=getattr(f, "name", "file")[:255],
-                size=getattr(f, "size", 0) or 0,
-                content_type=getattr(f, "content_type", "") or "",
+                file=sf,
+                original_name=str(meta.get("original_name") or getattr(sf, "name", "file"))[:255],
+                size=getattr(sf, "size", 0) or 0,
+                content_type=str(meta.get("content_type") or "")[:120],
             )
 
         logger.info(
@@ -261,10 +283,12 @@ class AdminAppealAnswerView(APIView):
         files = request.FILES.getlist("files") or request.FILES.getlist("file")
         if len(files) > 5:
             return _err("Maksimal 5 ta fayl biriktirish mumkin.", 400)
+        safe_files = []
         for f in files:
             err = _validate_upload(f)
             if err:
                 return _err(err, 400)
+            safe_files.append(_sanitized_file(f))
 
         note = ser.validated_data.get("admin_note") or ""
         if note:
@@ -272,14 +296,14 @@ class AdminAppealAnswerView(APIView):
             appeal.save(update_fields=["admin_note", "updated_at"])
         appeal.mark_answered(request.user, ser.validated_data["answer_text"].strip())
 
-        for f in files:
+        for sf, meta in safe_files:
             AppealAttachment.objects.create(
                 appeal=appeal,
                 kind=AppealAttachment.Kind.ADMIN,
-                file=f,
-                original_name=getattr(f, "name", "file")[:255],
-                size=getattr(f, "size", 0) or 0,
-                content_type=getattr(f, "content_type", "") or "",
+                file=sf,
+                original_name=str(meta.get("original_name") or getattr(sf, "name", "file"))[:255],
+                size=getattr(sf, "size", 0) or 0,
+                content_type=str(meta.get("content_type") or "")[:120],
             )
 
         appeal = (

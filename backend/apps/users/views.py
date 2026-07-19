@@ -24,10 +24,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import User, AuditLog
-from .throttles import RefreshTokenThrottle
+from .throttles import (
+    ForgotPasswordThrottle,
+    LoginAccountThrottle,
+    LoginIPThrottle,
+    RefreshTokenThrottle,
+)
 from .serializers import (
     UserSerializer, UserUpdateSerializer,
     RegisterSerializer, ChangePasswordSerializer,
@@ -50,6 +54,14 @@ from .hemis_service import (
     sync_user_from_employee,
     HemisAuthError, HemisAPIError, HemisRateLimitError,
 )
+from utils.jwt_security import (
+    blacklist_refresh,
+    clear_jwt_cookies,
+    denylist_access_token,
+    extract_access_from_request,
+    extract_refresh_from_request,
+    set_jwt_cookies,
+)
 
 
 def _tokens(user):
@@ -60,6 +72,26 @@ def _tokens(user):
 
 def _success(data, status_code=status.HTTP_200_OK):
     return Response({"success": True, "data": data}, status=status_code)
+
+
+def _auth_success(user, *, extra=None, status_code=status.HTTP_200_OK, created=None):
+    """
+    JWT body + httpOnly cookie.
+    Frontend tokenlarni localStorage ga yozmasin — cookie asosiy manba.
+    """
+    tokens = _tokens(user)
+    payload = {
+        "user": UserSerializer(user).data,
+        "tokens": tokens,
+        "auth_mode": "cookie+bearer",
+    }
+    if created is not None:
+        payload["created"] = created
+    if extra:
+        payload.update(extra)
+    response = Response({"success": True, "data": payload}, status=status_code)
+    set_jwt_cookies(response, tokens["access"], tokens["refresh"])
+    return response
 
 
 def _error(detail, status_code=status.HTTP_400_BAD_REQUEST):
@@ -85,10 +117,37 @@ def _get_or_create_hemis_user(hemis_id, defaults):
         return User.objects.get_or_create(hemis_id=hemis_id, defaults=fallback_defaults)
 
 
-class ThrottledTokenRefreshView(TokenRefreshView):
-    """Klient tomonidagi retry-loop xatolari serverni bosib ketmasligi uchun
-    bitta refresh token boshiga cheklov qo'yilgan TokenRefreshView."""
+class ThrottledTokenRefreshView(APIView):
+    """
+    Access token yangilash.
+    Body {refresh} yoki httpOnly bildir_refresh cookie.
+    Yangi tokenlar yana cookie ga yoziladi.
+    """
+    permission_classes = [AllowAny]
     throttle_classes = [RefreshTokenThrottle]
+
+    def post(self, request):
+        raw = extract_refresh_from_request(request)
+        if not raw:
+            return _error("refresh token yo'q (body yoki cookie).", status.HTTP_401_UNAUTHORIZED)
+        try:
+            old = RefreshToken(raw)
+            # rotate
+            user_id = old.payload.get("user_id") or old.payload.get("user")
+            try:
+                old.blacklist()
+            except Exception:
+                pass
+            from django.contrib.auth import get_user_model
+
+            UserModel = get_user_model()
+            user = UserModel.objects.get(pk=user_id)
+            tokens = _tokens(user)
+            response = _success({"access": tokens["access"], "refresh": tokens["refresh"]})
+            set_jwt_cookies(response, tokens["access"], tokens["refresh"])
+            return response
+        except Exception:
+            return _error("Refresh token yaroqsiz.", status.HTTP_401_UNAUTHORIZED)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -102,6 +161,7 @@ class LoginView(APIView):
         { "email": "...", "password": "..." }
     """
     permission_classes = [AllowAny]
+    throttle_classes = [LoginIPThrottle, LoginAccountThrottle]
 
     def post(self, request):
         email    = request.data.get("email", "").strip().lower()
@@ -124,7 +184,7 @@ class LoginView(APIView):
             return _error("Hisob faol emas. Administrator bilan bog'laning.", status.HTTP_403_FORBIDDEN)
 
         AuditLog.log(AuditLog.Action.LOGIN_OK, target=user, request=request)
-        return _success({"user": UserSerializer(user).data, "tokens": _tokens(user)})
+        return _auth_success(user)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -145,6 +205,7 @@ class HemisLoginView(APIView):
       5. OsiyoNigohi JWT tokenlarini qaytarish
     """
     permission_classes = [AllowAny]
+    throttle_classes = [LoginIPThrottle, LoginAccountThrottle]
 
     def post(self, request):
         serializer = HemisLoginSerializer(data=request.data)
@@ -220,12 +281,8 @@ class HemisLoginView(APIView):
         # ── 5. Profil sinxronlash ─────────────────────────────
         sync_user_from_hemis(user, student_data)
 
-        # ── 6. OsiyoNigohi JWT tokenlar ─────────────────────────
-        return _success({
-            "user":    UserSerializer(user).data,
-            "tokens":  _tokens(user),
-            "created": created,        # birinchi marta kirishi
-        })
+        # ── 6. OsiyoNigohi JWT tokenlar (+ httpOnly cookie) ─────
+        return _auth_success(user, created=created)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -246,6 +303,7 @@ class HemisTutorLoginView(APIView):
       5. OsiyoNigohi JWT tokenlarini qaytarish
     """
     permission_classes = [AllowAny]
+    throttle_classes = [LoginIPThrottle, LoginAccountThrottle]
 
     def post(self, request):
         serializer = HemisTutorLoginSerializer(data=request.data)
@@ -319,12 +377,8 @@ class HemisTutorLoginView(APIView):
         # ── 7. Profil sinxronlash ─────────────────────────────
         sync_user_from_tutor(user, tutor_profile)
 
-        # ── 8. OsiyoNigohi JWT tokenlar ─────────────────────────
-        return _success({
-            "user":    UserSerializer(user).data,
-            "tokens":  _tokens(user),
-            "created": created,
-        })
+        # ── 8. OsiyoNigohi JWT tokenlar (+ httpOnly cookie) ─────
+        return _auth_success(user, created=created)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -499,15 +553,12 @@ class HemisOAuthCallbackView(APIView):
             except Exception:
                 pass
 
-        # ── 10. OsiyoNigohi JWT tokenlar — frontendga yo'naltirish ─
+        # ── 10. JWT cookie + callback (token URL da emas — XSS riski) ─
         tokens = _tokens(user)
-        import urllib.parse
-        params = urllib.parse.urlencode({
-            "access":  tokens["access"],
-            "refresh": tokens["refresh"],
-        })
-        frontend_callback = f"{settings.FRONTEND_URL}/auth/callback?{params}"
-        return HttpResponseRedirect(frontend_callback)
+        frontend_callback = f"{settings.FRONTEND_URL.rstrip('/')}/auth/callback?ok=1"
+        response = HttpResponseRedirect(frontend_callback)
+        set_jwt_cookies(response, tokens["access"], tokens["refresh"])
+        return response
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -515,24 +566,33 @@ class HemisOAuthCallbackView(APIView):
 # ═══════════════════════════════════════════════════════════════
 class LogoutView(APIView):
     """
-    Refresh tokenni blacklistga qo'shish.
+    To'liq logout:
+    - access jti denylist (muddat tugaguncha)
+    - refresh blacklist
+    - httpOnly cookie tozalash
 
         POST /api/v1/auth/logout/
-        { "refresh": "<refresh_token>" }
+        Body ixtiyoriy: { "refresh", "access" } — cookie ham o'qiladi
     """
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        refresh = request.data.get("refresh")
-        if not refresh:
-            return _error("refresh maydoni majburiy.")
-        try:
-            RefreshToken(refresh).blacklist()
-        except Exception:
-            pass  # allaqachon blacklistda bo'lsa — muammo emas
-        AuditLog.log(AuditLog.Action.LOGOUT, actor=request.user,
-                     target=request.user, request=request)
-        return _success({"detail": "Muvaffaqiyatli chiqildi."})
+        access = request.data.get("access") or extract_access_from_request(request)
+        refresh = extract_refresh_from_request(request)
+
+        denylist_access_token(access)
+        blacklist_refresh(refresh)
+
+        if request.user and request.user.is_authenticated:
+            AuditLog.log(
+                AuditLog.Action.LOGOUT,
+                actor=request.user,
+                target=request.user,
+                request=request,
+            )
+        response = _success({"detail": "Muvaffaqiyatli chiqildi.", "revoked": True})
+        clear_jwt_cookies(response)
+        return response
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -639,12 +699,8 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            user   = serializer.save()
-            tokens = _tokens(user)
-            return _success(
-                {"user": UserSerializer(user).data, "tokens": tokens},
-                status.HTTP_201_CREATED,
-            )
+            user = serializer.save()
+            return _auth_success(user, status_code=status.HTTP_201_CREATED)
         return Response(
             {"success": False, "errors": serializer.errors},
             status=status.HTTP_400_BAD_REQUEST,
@@ -937,7 +993,7 @@ class ForgotPasswordView(APIView):
     Production'da email orqali yuboriladi.
     """
     permission_classes = [AllowAny]
-    throttle_scope = "forgot_password"
+    throttle_classes = [ForgotPasswordThrottle]
 
     def post(self, request):
         email = request.data.get("email", "").strip().lower()

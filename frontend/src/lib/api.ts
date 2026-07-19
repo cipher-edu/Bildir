@@ -2,9 +2,9 @@ import axios from "axios";
 import { useAuthStore } from "@/stores/authStore";
 
 /**
- * MUHIM: baseURL doim relative — brauzer HECH QACHON :8000 ga ulanmaydi.
- * So'rovlar: same-origin /api/v1/* → Next route proxy → Django.
- * (Turbopack/dev va Docker bir xil ishlaydi.)
+ * baseURL relative — /api/v1/* → Next proxy → Django.
+ * withCredentials: httpOnly cookie (bildir_access / bildir_refresh).
+ * Access token localStorage da SAQLANMAYDI (XSS himoya).
  */
 const API_BASE = "/api/v1";
 
@@ -16,11 +16,11 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
+  // Memory dagi access (ixtiyoriy); asosiy manba — httpOnly cookie
   const token = useAuthStore.getState().accessToken;
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  // Ko'p tillilik: backend locale_from_request
   try {
     const loc =
       (typeof window !== "undefined" &&
@@ -34,7 +34,33 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-const isRefreshRequest = (url?: string) => !!url && url.includes("/auth/token/refresh/");
+const isRefreshRequest = (url?: string) =>
+  !!url && url.includes("/auth/token/refresh/");
+
+let refreshPromise: Promise<string | null> | null = null;
+
+async function silentRefresh(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        // Body bo'sh — backend cookie dagi refresh ni o'qiydi
+        const res = await api.post("/auth/token/refresh/", {});
+        const newAccess =
+          res.data?.access || res.data?.data?.access || null;
+        if (newAccess) {
+          useAuthStore.getState().setAccessToken(newAccess);
+          return newAccess as string;
+        }
+        return null;
+      } catch {
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
 
 api.interceptors.response.use(
   (res) => res,
@@ -42,26 +68,26 @@ api.interceptors.response.use(
     const original = error.config;
     if (
       error.response?.status === 401 &&
+      original &&
       !original._retry &&
       !isRefreshRequest(original?.url)
     ) {
       original._retry = true;
-      const refresh = useAuthStore.getState().refreshToken;
-      if (refresh) {
-        try {
-          const res = await api.post("/auth/token/refresh/", { refresh });
-          const newAccess = res.data?.access || res.data?.data?.access;
-          if (newAccess) {
-            useAuthStore.getState().setAccessToken(newAccess);
-            original.headers.Authorization = `Bearer ${newAccess}`;
-            return api(original);
-          }
-        } catch {
-          /* refresh failed */
-        }
+      const newAccess = await silentRefresh();
+      if (newAccess) {
+        original.headers = original.headers || {};
+        original.headers.Authorization = `Bearer ${newAccess}`;
+        return api(original);
       }
       useAuthStore.getState().logout();
-      window.location.href = "/login";
+      if (typeof window !== "undefined") {
+        const path = window.location.pathname;
+        const publicPaths = ["/", "/news", "/privacy", "/s/", "/auth/"];
+        const isPublic = publicPaths.some((p) => path === p || path.startsWith(p));
+        if (!path.startsWith("/login") && !isPublic) {
+          window.location.href = "/login";
+        }
+      }
     }
     return Promise.reject(error);
   }
@@ -83,9 +109,10 @@ export const authApi = {
   oauthInit: (portal?: "student" | "employee") =>
     api.get("/auth/oauth/hemis/", portal ? { params: { portal } } : undefined),
 
-  logout: (refresh?: string) => {
-    const token = refresh || useAuthStore.getState().refreshToken;
-    return api.post("/auth/logout/", token ? { refresh: token } : {});
+  /** Cookie + access denylist; body ixtiyoriy */
+  logout: () => {
+    const access = useAuthStore.getState().accessToken;
+    return api.post("/auth/logout/", access ? { access } : {});
   },
 
   me: () => api.get("/auth/me/"),

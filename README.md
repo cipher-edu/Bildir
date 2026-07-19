@@ -174,11 +174,17 @@ docker compose exec backend python manage.py ensure_superuser
 
 ## Xavfsizlik eslatmalari
 
+Batafsil: **[docs/SECURITY.md](./docs/SECURITY.md)**
+
 - `.env` **commit qilinmaydi** — faqat `.env.example`
+- JWT: **httpOnly cookie** + access denylist (logout); access default **15 daqiqa**
+- Tokenlar **localStorage da saqlanmaydi**
+- So‘rovnoma: `select_for_update` + atomic claim (double-submit himoya)
+- K-anonimlik: kesimda `min_n_for_breakdown` (anonimda min 5)
+- Fayl: magic-byte + rasm re-encode + attachment serve
 - Productionda `DJANGO_SECRET_KEY`, `JWT_SECRET_KEY`, DB parollarini almashtiring
 - `DEBUG=False` va ruxsat etilgan hostlarni sozlang
 - HEMIS tokenlarini ochiq repoga yozmang
-- Anonim so‘rovnoma / whistle — identifikatsiya talab qilinmaydi
 
 ---
 

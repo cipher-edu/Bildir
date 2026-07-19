@@ -4,32 +4,38 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, AlertCircle, BookOpen } from "lucide-react";
 import { useAuthStore } from "@/stores/authStore";
 import { authApi } from "@/lib/api";
+import { getRoleHome } from "@/lib/roles";
+import { UserRole } from "@/types";
 
 function CallbackInner() {
-  const router       = useRouter();
-  const params       = useSearchParams();
-  const setAuth      = useAuthStore((s) => s.setAuth);
+  const router = useRouter();
+  const params = useSearchParams();
+  const setAuth = useAuthStore((s) => s.setAuth);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const access  = params.get("access");
+    // Yangi oqim: JWT httpOnly cookie da; URL da token yo'q (XSS)
+    // Legacy: ?access=&refresh= hali ham qo'llab-quvvatlanadi
+    const access = params.get("access");
     const refresh = params.get("refresh");
+    const ok = params.get("ok");
 
-    if (!access || !refresh) {
-      setError("Token ma'lumotlari topilmadi. Qaytadan kirish kerak.");
+    if (access) {
+      useAuthStore.getState().setAccessToken(access);
+    }
+
+    if (!ok && !access) {
+      setError("Autentifikatsiya ma'lumotlari topilmadi. Qaytadan kirish kerak.");
       return;
     }
 
-    useAuthStore.getState().setAccessToken(access);
-
-    authApi.me()
+    authApi
+      .me()
       .then((res) => {
-        const user = res.data.data;
-        setAuth(user, access, refresh);
-
-        const { getRoleHome } = require("@/lib/roles");
-        const home = getRoleHome(user.role);
-        router.replace(home);
+        const user = res.data?.data ?? res.data;
+        // Tokenlar cookie da; memory ga faqat access (ixtiyoriy)
+        setAuth(user, access || null, refresh || null);
+        router.replace(getRoleHome(user.role as UserRole));
       })
       .catch(() => {
         setError("Foydalanuvchi ma'lumotlari olinmadi. Qaytadan kirish kerak.");
@@ -47,7 +53,8 @@ function CallbackInner() {
           <p className="text-gray-500 text-sm mb-6">{error}</p>
           <button
             onClick={() => router.push("/login")}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors">
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-colors"
+          >
             Kirish sahifasiga qaytish
           </button>
         </div>
@@ -72,11 +79,13 @@ function CallbackInner() {
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+        </main>
+      }
+    >
       <CallbackInner />
     </Suspense>
   );

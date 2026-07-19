@@ -387,7 +387,8 @@ export default function LoginPage() {
     try {
       const res = await authApi.loginHemisStudent(form.login, form.password);
       const { user: u, tokens } = res.data.data;
-      setAuth(u, tokens.access, tokens.refresh);
+      // Cookie httpOnly da; memory ga qisqa access (localStorage yo'q)
+      setAuth(u, tokens?.access || null, null);
       router.push(getRoleHome(u.role as UserRole));
     } catch (err: unknown) {
       handleHemisFail(err, "Login yoki parol xato.");
@@ -399,7 +400,7 @@ export default function LoginPage() {
     try {
       const res = await authApi.loginHemisTutor(form.login, form.password);
       const { user: u, tokens } = res.data.data;
-      setAuth(u, tokens.access, tokens.refresh);
+      setAuth(u, tokens?.access || null, null);
       router.push(getRoleHome(u.role as UserRole));
     } catch (err: unknown) {
       handleHemisFail(err, "Login yoki parol xato.");
@@ -411,7 +412,7 @@ export default function LoginPage() {
     try {
       const res = await authApi.login(form.email, form.password);
       const { user: u, tokens } = res.data.data;
-      setAuth(u, tokens.access, tokens.refresh);
+      setAuth(u, tokens?.access || null, null);
       router.push(getRoleHome(u.role as UserRole));
     } catch (err: unknown) {
       const ex = err as { response?: { data?: { detail?: string } } };
@@ -436,11 +437,11 @@ export default function LoginPage() {
           style={{ width: 600, height: 600, background: "radial-gradient(circle, #6366f1, transparent 70%)", top: "50%", left: "50%", transform: "translate(-50%, -50%)", filter: "blur(90px)" }} />
 
         {/* Mobile back + language */}
-        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-10">
-          <button onClick={() => router.push("/")}
+        <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-30">
+          <Link href="/"
             className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-white transition-colors">
             <ChevronLeft className="w-4 h-4" /> {t("login.backHome")}
-          </button>
+          </Link>
           <LanguageSwitcher />
         </div>
 

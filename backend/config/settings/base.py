@@ -132,7 +132,8 @@ AUTH_PASSWORD_VALIDATORS = [
 # ---- REST Framework -----------------------------------------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        # Cookie (httpOnly) + Bearer + access denylist
+        "apps.users.authentication.CookieJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -145,8 +146,20 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Global throttle (view-level qo'shimcha login throttle lar bilan)
+    "DEFAULT_THROTTLE_CLASSES": [
+        "apps.users.throttles.BurstAnonThrottle",
+        "apps.users.throttles.BurstUserThrottle",
+    ],
     "DEFAULT_THROTTLE_RATES": {
-        "token_refresh": "6/min",
+        # Umumiy
+        "anon": config("THROTTLE_ANON", default="120/min"),
+        "user": config("THROTTLE_USER", default="300/min"),
+        # Auth — qat'iy (brute-force)
+        "login": config("THROTTLE_LOGIN", default="10/min"),
+        "login_account": config("THROTTLE_LOGIN_ACCOUNT", default="20/hour"),
+        "token_refresh": config("THROTTLE_TOKEN_REFRESH", default="30/min"),
+        "forgot_password": config("THROTTLE_FORGOT_PASSWORD", default="5/hour"),
     },
 }
 
@@ -171,8 +184,14 @@ else:
     _JWT_VERIFY_KEY  = _JWT_SIGNING_KEY
     _JWT_KID         = "primary"
 
+# Access qisqa muddat (default 15 daqiqa) — logout oynasini kichiklashtirish
+# Refresh httpOnly cookie da; access ham cookie + ixtiyoriy memory
+JWT_ACCESS_COOKIE = "bildir_access"
+JWT_REFRESH_COOKIE = "bildir_refresh"
+JWT_COOKIE_SAMESITE = config("JWT_COOKIE_SAMESITE", default="Lax")
+
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME":    timedelta(minutes=config("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", default=120, cast=int)),
+    "ACCESS_TOKEN_LIFETIME":    timedelta(minutes=config("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", default=15, cast=int)),
     "REFRESH_TOKEN_LIFETIME":   timedelta(days=config("JWT_REFRESH_TOKEN_EXPIRE_DAYS", default=7, cast=int)),
     "ROTATE_REFRESH_TOKENS":    True,
     "BLACKLIST_AFTER_ROTATION": True,

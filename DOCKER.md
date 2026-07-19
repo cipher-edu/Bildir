@@ -60,7 +60,13 @@ docker compose exec backend python manage.py fill_content_i18n --force
 docker compose exec backend python manage.py seed_demo_news
 docker compose exec backend python manage.py seed_demo_officials
 docker compose exec backend python manage.py seed_demo_compliance
+docker compose exec backend python manage.py security_maintenance
+docker compose exec backend python manage.py flushexpiredtokens
 docker compose exec backend python manage.py shell
+
+# maintenance servisi (kunlik blacklist flush) holati
+docker compose ps maintenance
+docker compose logs -f maintenance
 
 # Postgres shell
 docker compose exec db psql -U auth -d auth_starter

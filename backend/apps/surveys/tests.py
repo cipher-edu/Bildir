@@ -93,6 +93,23 @@ class SurveyFlowTests(TestCase):
         with self.assertRaises(ValidationError):
             resp.save()
 
+    def test_double_submit_same_token_rejected(self):
+        """Race/ballot stuffing: bir token bilan ikkinchi submit 409."""
+        survey = self._create_published_anonymous()
+        part, token = services.start_participation(survey, self.student)
+        q = survey.questions.first()
+        answers = [{"question_id": str(q.id), "value": {"value": 3}}]
+        services.submit_response(survey, self.student, token, answers)
+        with self.assertRaises(services.SurveyServiceError) as ctx:
+            services.submit_response(survey, self.student, token, answers)
+        self.assertIn(ctx.exception.code, (400, 409))
+        part.refresh_from_db()
+        self.assertTrue(part.token_used)
+        self.assertEqual(
+            SurveyResponse.objects.filter(survey=survey).count(),
+            1,
+        )
+
     def test_api_available_and_submit(self):
         survey = self._create_published_anonymous()
         self.client.force_authenticate(user=self.student)
