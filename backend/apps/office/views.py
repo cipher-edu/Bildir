@@ -141,7 +141,7 @@ class MyAppealsView(APIView):
         qs = (
             Appeal.objects.filter(user=request.user)
             .prefetch_related("attachments")
-            .select_related("answered_by")
+            .select_related("answered_by", "responsible_person")
         )
         return _ok(AppealSerializer(qs, many=True).data)
 
@@ -161,8 +161,18 @@ class MyAppealsView(APIView):
                 return _err(err, 400)
             safe_files.append(_sanitized_file(f))
 
+        person = None
+        person_id = ser.validated_data.get("responsible_person")
+        if person_id:
+            person = ResponsiblePerson.objects.filter(
+                pk=person_id, is_active=True, is_public=True
+            ).first()
+            if not person:
+                return _err("Tanlangan mas'ul shaxs topilmadi yoki faol emas.", 400)
+
         appeal = Appeal.objects.create(
             user=request.user,
+            responsible_person=person,
             subject=ser.validated_data["subject"].strip(),
             body=ser.validated_data["body"].strip(),
             category=ser.validated_data.get("category") or Appeal.Category.GENERAL,
@@ -187,7 +197,7 @@ class MyAppealsView(APIView):
         appeal = (
             Appeal.objects.filter(pk=appeal.pk)
             .prefetch_related("attachments")
-            .select_related("answered_by")
+            .select_related("answered_by", "responsible_person")
             .first()
         )
         return _ok(AppealSerializer(appeal).data, 201)
@@ -201,11 +211,19 @@ class MyAppealDetailView(APIView):
             appeal = (
                 Appeal.objects.filter(user=request.user)
                 .prefetch_related("attachments")
-                .select_related("answered_by")
+                .select_related("answered_by", "responsible_person")
                 .get(pk=pk)
             )
         except Appeal.DoesNotExist:
             return _err("Topilmadi.", 404)
+        # QR hali yo'q bo'lsa — sync fallback
+        if not appeal.qr_code_image:
+            try:
+                from apps.office.services import ensure_appeal_qr
+                ensure_appeal_qr(appeal)
+                appeal.refresh_from_db()
+            except Exception:
+                pass
         return _ok(AppealSerializer(appeal).data)
 
 

@@ -18,6 +18,8 @@ pydantic>=2.10.3
 gunicorn==23.0.0
 whitenoise==6.8.2
 redis==5.2.1
+celery==5.4.0
+django-celery-results==2.5.1
 pytest==8.3.4
 pytest-django==4.9.0
 factory-boy==3.3.1

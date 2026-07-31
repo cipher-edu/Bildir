@@ -472,6 +472,11 @@ export interface Appeal {
   user?: string;
   user_email?: string;
   user_name?: string;
+  responsible_person?: string | null;
+  responsible_person_id?: string | null;
+  responsible_person_name?: string | null;
+  unique_code?: string;
+  qr_code_url?: string | null;
   subject: string;
   body: string;
   category: AppealCategory;

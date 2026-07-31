@@ -277,6 +277,17 @@ HEMIS_STUDENT_OAUTH_CLIENT_SECRET = config("HEMIS_STUDENT_OAUTH_CLIENT_SECRET", 
 
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 
+# ---- Celery (profil sync + QR) ------------------------------
+CELERY_BROKER_URL = config("CELERY_BROKER_URL", default=config("REDIS_URL", default="redis://127.0.0.1:6379/1"))
+CELERY_RESULT_BACKEND = config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = config("TIME_ZONE", default="Asia/Tashkent")
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 120
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
 # ---- Logging ------------------------------------------------
 LOGGING = {
     "version": 1,
@@ -302,15 +313,15 @@ LOGGING = {
 
 # ---- Jazzmin Admin UI ---------------------------------------
 JAZZMIN_SETTINGS = {
-    "site_title":        "auth-starter Admin",
-    "site_header":       "auth-starter",
-    "site_brand":        "auth-starter",
+    "site_title":        "Bildir Admin",
+    "site_header":       "Bildir · NSPI/NDU",
+    "site_brand":        "Bildir",
     "site_logo":         None,
     "site_logo_classes": "img-circle",
     "site_icon":         None,
-    "welcome_sign":      "auth-starter — Boshqaruv paneli",
-    "copyright":         "auth-starter © 2026",
-    "search_model": ["users.User", "core.Faculty"],
+    "welcome_sign":      "Bildir — Komplayens va so'rovnoma boshqaruvi",
+    "copyright":         "Bildir © 2026 · NSPI HEMIS",
+    "search_model": ["users.User", "core.Faculty", "office.Appeal", "surveys.Survey"],
     "topmenu_links": [
         {"name": "API Docs", "url": "/api/v1/docs/", "new_window": True},
         {"name": "Sog'liq",  "url": "/api/v1/health/", "new_window": True},

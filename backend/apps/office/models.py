@@ -101,6 +101,15 @@ class Appeal(models.Model):
         related_name="appeals",
         verbose_name="Foydalanuvchi",
     )
+    # Survey NSPI uslubi: aniq mas'ul shaxsga murojaat (ixtiyoriy)
+    responsible_person = models.ForeignKey(
+        ResponsiblePerson,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appeals",
+        verbose_name="Mas'ul shaxs",
+    )
     subject = models.CharField(max_length=300, verbose_name="Mavzu")
     body = models.TextField(verbose_name="Murojaat matni")
     category = models.CharField(
@@ -114,6 +123,21 @@ class Appeal(models.Model):
         choices=Status.choices,
         default=Status.PENDING,
         db_index=True,
+    )
+    # Kuzatuv kodi + QR (Survey NSPI MessageToResponsible uslubi)
+    unique_code = models.CharField(
+        max_length=8,
+        unique=True,
+        editable=False,
+        blank=True,
+        default="",
+        verbose_name="Murojaat ID",
+    )
+    qr_code_image = models.ImageField(
+        upload_to="office/appeals/qr/%Y/%m/",
+        blank=True,
+        null=True,
+        verbose_name="QR kod",
     )
     # Admin javobi
     answer_text = models.TextField(blank=True, verbose_name="Javob matni")
@@ -131,6 +155,33 @@ class Appeal(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def save(self, *args, **kwargs):
+        import random
+
+        if not self.unique_code:
+            for _ in range(12):
+                code = "".join(str(random.randint(0, 9)) for _ in range(8))
+                if not Appeal.objects.filter(unique_code=code).exclude(pk=self.pk).exists():
+                    self.unique_code = code
+                    break
+            else:
+                self.unique_code = uuid.uuid4().hex[:8].upper()
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        # QR async (Celery) yoki sync fallback
+        if is_new and self.unique_code and not self.qr_code_image:
+            try:
+                from apps.office.tasks import generate_appeal_qr_code
+
+                generate_appeal_qr_code.delay(str(self.pk))
+            except Exception:
+                try:
+                    from apps.office.services import ensure_appeal_qr
+
+                    ensure_appeal_qr(self)
+                except Exception:
+                    pass
 
     class Meta:
         db_table = "office_appeals"

@@ -49,6 +49,7 @@ export default function AppealsPage() {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [category, setCategory] = useState("general");
+  const [personId, setPersonId] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -56,6 +57,15 @@ export default function AppealsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["my-appeals"],
     queryFn: async () => unwrap<Appeal[]>(await officeApi.myAppeals()),
+    enabled: isReady && !!user,
+  });
+
+  const { data: persons = [] } = useQuery({
+    queryKey: ["office-persons"],
+    queryFn: async () => {
+      const res = await officeApi.persons();
+      return unwrap<import("@/types").ResponsiblePerson[]>(res) ?? [];
+    },
     enabled: isReady && !!user,
   });
 
@@ -70,6 +80,7 @@ export default function AppealsPage() {
       fd.append("subject", subject.trim());
       fd.append("body", body.trim());
       fd.append("category", category);
+      if (personId) fd.append("responsible_person", personId);
       files.forEach((f) => fd.append("files", f));
       return officeApi.createAppeal(fd);
     },
@@ -79,6 +90,7 @@ export default function AppealsPage() {
       setSubject("");
       setBody("");
       setCategory("general");
+      setPersonId("");
       setFiles([]);
       setErr(null);
     },
@@ -249,8 +261,18 @@ export default function AppealsPage() {
                       <span className="text-[9px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 border border-white/10">
                         {a.category_display || a.category}
                       </span>
+                      {a.unique_code && (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-200 border border-cyan-400/25 font-mono">
+                          ID {a.unique_code}
+                        </span>
+                      )}
                     </div>
                     <p className="font-bold text-white text-[15px] leading-snug">{a.subject}</p>
+                    {a.responsible_person_name && (
+                      <p className="text-[11px] text-violet-300/90 mt-0.5">
+                        Mas&apos;ul: {a.responsible_person_name}
+                      </p>
+                    )}
                     <p className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span>{new Date(a.created_at).toLocaleString("uz-UZ")}</span>
                       {a.hours_left != null && !done && (
@@ -274,6 +296,29 @@ export default function AppealsPage() {
 
                 {isOpen && (
                   <div className="px-4 sm:px-5 pb-5 space-y-3.5 border-t border-white/[0.06] pt-4 bg-black/20">
+                    {(a.unique_code || a.qr_code_url) && (
+                      <div className="rounded-xl bg-cyan-500/10 border border-cyan-400/20 p-4 flex flex-wrap items-center gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] uppercase tracking-wide text-cyan-300/80 font-semibold mb-1">
+                            Kuzatuv kodi / QR
+                          </p>
+                          <p className="font-mono text-lg font-black text-white tracking-widest">
+                            {a.unique_code || "—"}
+                          </p>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            Ushbu kod va QR orqali murojaatingizni kuzatishingiz mumkin.
+                          </p>
+                        </div>
+                        {a.qr_code_url && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={mediaUrl(a.qr_code_url) || a.qr_code_url}
+                            alt={`QR ${a.unique_code || ""}`}
+                            className="w-24 h-24 rounded-xl bg-white p-1 border border-white/20 object-contain"
+                          />
+                        )}
+                      </div>
+                    )}
                     <div className="rounded-xl bg-black/25 border border-white/[0.06] p-4">
                       <p className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-2">
                         Murojaat matni
@@ -416,6 +461,25 @@ export default function AppealsPage() {
                   ))}
                 </div>
               </div>
+
+              <label className="block space-y-1.5">
+                <span className="text-[11px] text-slate-400 font-medium">
+                  Mas&apos;ul shaxs <span className="text-slate-600">(ixtiyoriy)</span>
+                </span>
+                <select
+                  value={personId}
+                  onChange={(e) => setPersonId(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl bg-black/35 border border-white/10 text-sm text-white focus:border-indigo-400/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="">Umumiy murojaat (tanlanmagan)</option>
+                  {persons.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {(p.full_name || `${p.last_name} ${p.first_name}`).trim()}
+                      {p.position ? ` — ${p.position}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="block space-y-1.5">
                 <span className="text-[11px] text-slate-400 font-medium">{t("appeals.subject")} *</span>
