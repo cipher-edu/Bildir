@@ -125,6 +125,11 @@ class AppealSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     category_display = serializers.CharField(source="get_category_display", read_only=True)
     answered_by_name = serializers.SerializerMethodField()
+    responsible_person_id = serializers.UUIDField(
+        source="responsible_person.id", read_only=True, allow_null=True
+    )
+    responsible_person_name = serializers.SerializerMethodField()
+    qr_code_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Appeal
@@ -133,6 +138,11 @@ class AppealSerializer(serializers.ModelSerializer):
             "user",
             "user_email",
             "user_name",
+            "responsible_person",
+            "responsible_person_id",
+            "responsible_person_name",
+            "unique_code",
+            "qr_code_url",
             "subject",
             "body",
             "category",
@@ -158,6 +168,8 @@ class AppealSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "user",
+            "unique_code",
+            "qr_code_url",
             "status",
             "answer_text",
             "answered_at",
@@ -208,6 +220,20 @@ class AppealSerializer(serializers.ModelSerializer):
     def get_sla_hours(self, obj):
         return SLA_HOURS
 
+    def get_responsible_person_name(self, obj):
+        p = obj.responsible_person
+        if not p:
+            return None
+        return p.full_name
+
+    def get_qr_code_url(self, obj):
+        if not obj.qr_code_image:
+            return None
+        try:
+            return obj.qr_code_image.url
+        except Exception:
+            return None
+
 
 class AppealCreateSerializer(serializers.Serializer):
     subject = serializers.CharField(max_length=300)
@@ -215,6 +241,7 @@ class AppealCreateSerializer(serializers.Serializer):
     category = serializers.ChoiceField(
         choices=Appeal.Category.choices, default=Appeal.Category.GENERAL
     )
+    responsible_person = serializers.UUIDField(required=False, allow_null=True)
 
 
 class AppealAnswerSerializer(serializers.Serializer):

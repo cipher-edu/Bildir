@@ -106,6 +106,40 @@ services:
     networks:
       - app_net
 
+  # Celery — QR generatsiya, HEMIS profil sync (Survey NSPI analog)
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-auth_starter}
+      POSTGRES_USER: ${POSTGRES_USER:-auth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auth_secret_change_me}
+      REDIS_URL: redis://redis:6379/1
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      WAIT_FOR_REDIS: "true"
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    command: ["celery", "-A", "config", "worker", "-l", "info"]
+    volumes:
+      - backend_media:/app/media
+      - backend_logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - app_net
+
   # Kunlik JWT blacklist tozalash (token bloat oldini olish)
   maintenance:
     build:
