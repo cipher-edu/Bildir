@@ -5,6 +5,9 @@
 
 services:
   backend:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+      JWT_COOKIE_SECURE: "false"
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     volumes:
       - ./backend:/app
@@ -23,3 +26,11 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
       WATCHPACK_POLLING: "true"
+
+  celery:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+
+  maintenance:
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development

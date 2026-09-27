@@ -7,6 +7,8 @@ from .base import *
 from utils.cors_security import sanitize_cors_origins
 
 DEBUG = False
+JWT_COOKIE_SECURE = config("JWT_COOKIE_SECURE", default=True, cast=bool)
+ALLOW_OPEN_REGISTRATION = False
 
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",
@@ -74,3 +76,36 @@ LOGGING = {
         "apps":   {"handlers": ["console"], "level": "INFO"},
     },
 }
+
+
+def _weak_secret(value: str) -> bool:
+    text = (value or "").strip()
+    if len(text) < 32:
+        return True
+    lowered = text.lower()
+    markers = ("change-me", "dev-secret", "dev-jwt", "please-change", "not-for-production")
+    return any(marker in lowered for marker in markers)
+
+
+if _weak_secret(SECRET_KEY):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY production uchun uzun va tasodifiy bo'lishi kerak."
+    )
+
+_signing = str(SIMPLE_JWT.get("SIGNING_KEY") or "")
+if SIMPLE_JWT.get("ALGORITHM", "").startswith("HS") and _weak_secret(_signing):
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(
+        "HS256 uchun JWT_SECRET_KEY productionda uzun va tasodifiy bo'lishi kerak."
+    )
+
+for _survey_key in ("SURVEY_ENCRYPTION_KEY", "SURVEY_HMAC_KEY", "SURVEY_TOKEN_KEY"):
+    if _weak_secret(config(_survey_key, default="")):
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            f"{_survey_key} productionda majburiy. SECRET_KEY dan hosila qilinmaydi."
+        )

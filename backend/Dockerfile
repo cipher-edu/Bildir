@@ -20,7 +20,8 @@ RUN pip install --upgrade pip \
 
 COPY . .
 
-RUN chmod +x /app/entrypoint.sh \
+RUN sed -i 's/\r$//' /app/entrypoint.sh \
+    && chmod +x /app/entrypoint.sh \
     && mkdir -p /app/media /app/staticfiles /app/logs
 
 EXPOSE 8000

@@ -99,10 +99,12 @@ def build_response_meta(survey: Survey, user: User) -> dict:
         return {}
 
     meta: dict[str, Any] = {}
+    # Anonim qatorda barqaror id saqlanmaydi (fakultet/guruh/yo'nalish FK).
+    anonymous = survey.privacy_mode == Survey.PrivacyMode.ANONYMOUS
 
-    # Fakultet
     if user.faculty_id:
-        meta["faculty_id"] = str(user.faculty_id)
+        if not anonymous:
+            meta["faculty_id"] = str(user.faculty_id)
         try:
             fac = user.faculty
             if fac is not None:
@@ -119,13 +121,10 @@ def build_response_meta(survey: Survey, user: User) -> dict:
     if gender:
         meta["gender"] = gender  # M / F
 
-    # Guruh — coarse/detailed da saqlanadi (admin kesim so'ragan)
-    # store_group_meta=False bo'lsa ham nom/id yoziladi, lekin k-anonimlik bilan yashiriladi
-    if user.group_id and (
-        survey.store_group_meta
-        or survey.stats_level in (Survey.StatsLevel.COARSE, Survey.StatsLevel.DETAILED)
-    ):
-        meta["group_id"] = str(user.group_id)
+    # Guruh faqat aniq so'ralganda. coarse/detailed o'zi guruhni yozmaydi.
+    if user.group_id and survey.store_group_meta:
+        if not anonymous:
+            meta["group_id"] = str(user.group_id)
         try:
             grp = user.group
             if grp is not None:
@@ -134,7 +133,8 @@ def build_response_meta(survey: Survey, user: User) -> dict:
             pass
 
     if survey.stats_level == Survey.StatsLevel.DETAILED and user.specialty_id:
-        meta["specialty_id"] = str(user.specialty_id)
+        if not anonymous:
+            meta["specialty_id"] = str(user.specialty_id)
         try:
             sp = user.specialty
             if sp is not None:
@@ -243,8 +243,7 @@ def start_participation(survey: Survey, user: User) -> tuple[SurveyParticipation
         part.token_expires_at = expires
         part.status = SurveyParticipation.Status.STARTED
         # Seans davomida token bog'lash uchun user vaqtincha saqlanadi
-        if survey.track_participation:
-            part.user = user
+        part.user = user if survey.track_participation else None
         part.participant_key = pkey
         part.save(
             update_fields=[
@@ -255,7 +254,7 @@ def start_participation(survey: Survey, user: User) -> tuple[SurveyParticipation
     else:
         part = SurveyParticipation.objects.create(
             survey=survey,
-            user=user,  # seans davomida; submit da track_participation=False bo'lsa unlink
+            user=user if survey.track_participation else None,
             participant_key=pkey,
             status=SurveyParticipation.Status.STARTED,
             token_hash=th,

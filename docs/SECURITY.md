@@ -14,9 +14,18 @@
 
 ## 3. JWT storage (XSS)
 
-- Access/refresh: **httpOnly** cookie (`bildir_access`, `bildir_refresh`)
+- Access/refresh: **faqat httpOnly** cookie (`bildir_access`, `bildir_refresh`)
+- JSON javobda token qaytarilmaydi
 - Frontend **localStorage da token saqlamaydi** (faqat user profili)
-- Cookie SameSite=Lax; productionda Secure=True (DEBUG=False)
+- Cookie SameSite=Lax; `JWT_COOKIE_SECURE` productionda True
+- Parol almashganda yoki tiklanganda sessiya epoch oshadi, eski tokenlar rad etiladi
+
+## 3a. Ro'yxatdan o'tish
+
+- `POST /auth/register/` faqat `DEBUG=True`
+- Ochiq ro'yxatdan o'tish rolni qabul qilmaydi (har doim talaba)
+- Foydalanuvchi yaratish va rol berish — faqat superadmin
+- Audit inspektor foydalanuvchini yoza olmaydi
 
 ## 4. Logout revokatsiya
 

@@ -55,6 +55,14 @@ class WhistleReportSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "tracking_code", "created_at", "updated_at"]
 
+    def to_representation(self, instance):
+        from utils.at_rest import open_text
+
+        data = super().to_representation(instance)
+        data["message"] = open_text(instance.message, purpose="whistle-message")
+        data["context"] = open_text(instance.context, purpose="whistle-context")
+        return data
+
 
 class WhistleCreateSerializer(serializers.Serializer):
     message = serializers.CharField(min_length=10, max_length=5000)

@@ -5,6 +5,8 @@ from decouple import Csv, config
 from .base import *
 
 DEBUG = True
+JWT_COOKIE_SECURE = False
+ALLOW_OPEN_REGISTRATION = True
 
 ALLOWED_HOSTS = config(
     "DJANGO_ALLOWED_HOSTS",

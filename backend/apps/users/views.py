@@ -34,7 +34,7 @@ from .throttles import (
 )
 from .serializers import (
     UserSerializer, UserUpdateSerializer,
-    RegisterSerializer, ChangePasswordSerializer,
+    RegisterSerializer, AdminCreateUserSerializer, ChangePasswordSerializer,
     HemisLoginSerializer, HemisTutorLoginSerializer,
 )
 from .hemis_service import (
@@ -62,12 +62,15 @@ from utils.jwt_security import (
     extract_refresh_from_request,
     set_jwt_cookies,
 )
+from utils.session_epoch import bump_epoch, current_epoch, token_epoch_ok
 
 
 def _tokens(user):
-    """User uchun access + refresh tokenlar qaytaradi."""
+    """User uchun access + refresh. Epoch parol almashganda sessiyani uzadi."""
     refresh = RefreshToken.for_user(user)
-    return {"access": str(refresh.access_token), "refresh": str(refresh)}
+    refresh["epoch"] = current_epoch(user.pk)
+    access = refresh.access_token
+    return {"access": str(access), "refresh": str(refresh)}
 
 
 def _success(data, status_code=status.HTTP_200_OK):
@@ -76,14 +79,13 @@ def _success(data, status_code=status.HTTP_200_OK):
 
 def _auth_success(user, *, extra=None, status_code=status.HTTP_200_OK, created=None):
     """
-    JWT body + httpOnly cookie.
-    Frontend tokenlarni localStorage ga yozmasin — cookie asosiy manba.
+    JWT faqat httpOnly cookie da.
+    JSON javobda access/refresh qaytarilmaydi — sahifa skripti o‘qiy olmasin.
     """
     tokens = _tokens(user)
     payload = {
         "user": UserSerializer(user).data,
-        "tokens": tokens,
-        "auth_mode": "cookie+bearer",
+        "auth_mode": "cookie",
     }
     if created is not None:
         payload["created"] = created
@@ -140,10 +142,12 @@ class ThrottledTokenRefreshView(APIView):
                 pass
             from django.contrib.auth import get_user_model
 
+            if not token_epoch_ok(user_id, old.payload.get("epoch")):
+                return _error("Refresh token yaroqsiz.", status.HTTP_401_UNAUTHORIZED)
             UserModel = get_user_model()
             user = UserModel.objects.get(pk=user_id)
             tokens = _tokens(user)
-            response = _success({"access": tokens["access"], "refresh": tokens["refresh"]})
+            response = _success({"auth_mode": "cookie"})
             set_jwt_cookies(response, tokens["access"], tokens["refresh"])
             return response
         except Exception:
@@ -645,6 +649,8 @@ class ChangePasswordView(APIView):
         if serializer.is_valid():
             request.user.set_password(serializer.validated_data["new_password"])
             request.user.save()
+            bump_epoch(request.user.pk)
+            denylist_access_token(extract_access_from_request(request))
             return _success({"detail": "Parol muvaffaqiyatli o'zgartirildi."})
         return Response(
             {"success": False, "errors": serializer.errors},
@@ -697,6 +703,8 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        if not getattr(settings, "ALLOW_OPEN_REGISTRATION", False):
+            return _error("Ro'yxatdan o'tish yopiq.", status.HTTP_404_NOT_FOUND)
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
             user = serializer.save()
@@ -724,15 +732,10 @@ class AdminUserListView(APIView):
     """
     permission_classes = [IsAuthenticated]
 
-    # superadmin va audit_inspector barcha imkoniyatlarga ega
-    FULL_ACCESS = {User.Role.SUPERADMIN, User.Role.AUDIT_INSPECTOR}
-
     def _check_permission(self, user, write=False):
-        if user.role not in ADMIN_ROLES:
-            return False
-        if write and user.role not in self.FULL_ACCESS:
-            return False
-        return True
+        if write:
+            return user.role == User.Role.SUPERADMIN
+        return user.role in ADMIN_ROLES
 
     def get(self, request):
         if not self._check_permission(request.user):
@@ -775,7 +778,7 @@ class AdminUserListView(APIView):
         if not self._check_permission(request.user, write=True):
             return _error("Ruxsat yo'q.", status.HTTP_403_FORBIDDEN)
 
-        serializer = RegisterSerializer(data=request.data)
+        serializer = AdminCreateUserSerializer(data=request.data, context={"request": request})
         if serializer.is_valid():
             user = serializer.save()
             AuditLog.log(AuditLog.Action.USER_CREATE, actor=request.user,
@@ -810,6 +813,8 @@ class AdminUserDetailView(APIView):
         return _success(UserSerializer(user).data)
 
     def patch(self, request, pk):
+        if request.user.role == User.Role.AUDIT_INSPECTOR:
+            return _error("Audit inspektor faqat o'qiy oladi.", status.HTTP_403_FORBIDDEN)
         if request.user.role not in ADMIN_ROLES:
             return _error("Ruxsat yo'q.", status.HTTP_403_FORBIDDEN)
 
@@ -817,9 +822,8 @@ class AdminUserDetailView(APIView):
         if not user:
             return _error("Foydalanuvchi topilmadi.", status.HTTP_404_NOT_FOUND)
 
-        # Rol o'zgartirish — superadmin va audit_inspector uchun ruxsat
         allowed_fields = {"is_active", "phone", "first_name", "last_name", "language", "gender"}
-        if request.user.role in {User.Role.SUPERADMIN, User.Role.AUDIT_INSPECTOR}:
+        if request.user.role == User.Role.SUPERADMIN:
             allowed_fields.add("role")
 
         old_role = user.role
@@ -844,7 +848,7 @@ class AdminUserDetailView(APIView):
         return _success(UserSerializer(user).data)
 
     def delete(self, request, pk):
-        if request.user.role not in {User.Role.SUPERADMIN, User.Role.AUDIT_INSPECTOR}:
+        if request.user.role != User.Role.SUPERADMIN:
             return _error("Ruxsat yo'q.", status.HTTP_403_FORBIDDEN)
         user = self._get_user(pk)
         if not user:
@@ -982,6 +986,36 @@ from datetime import timedelta
 
 RESET_TOKEN_TTL = 3600  # 1 soat (soniya)
 RESET_CACHE_PREFIX = "pwd_reset:"
+_RESET_DETAIL = "Agar email ro'yxatdan o'tgan bo'lsa, ko'rsatmalar yuborildi."
+
+
+def _send_reset_email(user, raw_token: str) -> None:
+    """Tokenni javobga yozmaydi. Pochta sozlanmagan bo'lsa logga token tushmaydi."""
+    import logging
+
+    from django.core.mail import send_mail
+
+    logger = logging.getLogger("apps.users")
+    front = str(getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
+    link = f"{front}/auth/reset-password?token={raw_token}" if front else ""
+    body = (
+        "Bildir parolini tiklash uchun havola (1 soat):\n"
+        f"{link}\n\n"
+        "Agar bu so'rovni siz yubormagan bo'lsangiz, xatni e'tiborsiz qoldiring."
+    )
+    if not (settings.DEBUG or getattr(settings, "EMAIL_HOST", "")):
+        logger.error("Parol tiklash pochtasi yuborilmadi: EMAIL_HOST bo'sh")
+        return
+    try:
+        send_mail(
+            subject="Bildir — parolni tiklash",
+            message=body,
+            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None) or "noreply@localhost",
+            recipient_list=[user.email],
+            fail_silently=False,
+        )
+    except Exception:
+        logger.exception("Parol tiklash pochtasi yuborilmadi")
 
 
 class ForgotPasswordView(APIView):
@@ -989,8 +1023,7 @@ class ForgotPasswordView(APIView):
     POST /api/v1/auth/forgot-password/
     { "email": "..." }
 
-    Tokenni cache'ga saqlaydi va (dev rejimida) responseda qaytaradi.
-    Production'da email orqali yuboriladi.
+    Token faqat pochtada. Javobda token yo'q, email mavjudligi oshkor qilinmaydi.
     """
     permission_classes = [AllowAny]
     throttle_classes = [ForgotPasswordThrottle]
@@ -1004,23 +1037,15 @@ class ForgotPasswordView(APIView):
             user = User.objects.get(email=email, is_active=True)
         except User.DoesNotExist:
             # Xavfsizlik: email mavjud bo'lmasa ham xuddi shunday javob
-            return _success({"detail": "Agar email ro'yxatdan o'tgan bo'lsa, ko'rsatmalar yuborildi."})
+            return _success({"detail": _RESET_DETAIL})
 
         # Token yaratish
         raw_token = secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
         cache.set(f"{RESET_CACHE_PREFIX}{token_hash}", str(user.id), RESET_TOKEN_TTL)
 
-        # Production'da email yuboriladi (hozir faqat dev rejimi)
-        from django.conf import settings as _s
-        if getattr(_s, "DEBUG", False):
-            return _success({
-                "detail": "Token yaratildi (dev rejimi — email yuborilmadi).",
-                "token": raw_token,  # Faqat DEBUG rejimida
-            })
-
-        # TODO: send_mail(subject, message, from, [email])
-        return _success({"detail": "Agar email ro'yxatdan o'tgan bo'lsa, ko'rsatmalar yuborildi."})
+        _send_reset_email(user, raw_token)
+        return _success({"detail": _RESET_DETAIL})
 
 
 class ResetPasswordView(APIView):
@@ -1053,6 +1078,7 @@ class ResetPasswordView(APIView):
 
         user.set_password(new_password)
         user.save(update_fields=["password"])
+        bump_epoch(user.pk)
 
         # Tokenni o'chirib tashlash (bir martalik)
         cache.delete(f"{RESET_CACHE_PREFIX}{token_hash}")

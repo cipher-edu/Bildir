@@ -4,6 +4,7 @@ import json
 
 from rest_framework import serializers
 
+from utils.html_sanitize import sanitize_html, sanitize_i18n_html
 from utils.i18n_fields import (
     NEWS_CATEGORY_I18N,
     NEWS_STATUS_I18N,
@@ -152,14 +153,16 @@ class NewsArticleSerializer(serializers.ModelSerializer):
         # Localized display fields (API consumer gets translated title/summary/body)
         data["title"] = pick_i18n(instance.title, instance.title_i18n, loc)
         data["summary"] = pick_i18n(instance.summary, instance.summary_i18n, loc)
-        data["body"] = pick_i18n(instance.body, instance.body_i18n, loc)
+        data["body"] = sanitize_html(pick_i18n(instance.body, instance.body_i18n, loc))
         data["meta_title"] = pick_i18n(instance.meta_title, instance.meta_title_i18n, loc)
         data["meta_description"] = pick_i18n(
             instance.meta_description, instance.meta_description_i18n, loc
         )
         data["title_i18n"] = self._with_base_locale(instance.title, instance.title_i18n)
         data["summary_i18n"] = self._with_base_locale(instance.summary, instance.summary_i18n)
-        data["body_i18n"] = self._with_base_locale(instance.body, instance.body_i18n)
+        data["body_i18n"] = sanitize_i18n_html(
+            self._with_base_locale(instance.body, instance.body_i18n)
+        )
         data["meta_title_i18n"] = self._with_base_locale(
             instance.meta_title, instance.meta_title_i18n
         )
@@ -192,7 +195,10 @@ class NewsArticleSerializer(serializers.ModelSerializer):
             return value or ""
         if len(value) > 500_000:
             raise serializers.ValidationError("Matn juda uzun.")
-        return value
+        return sanitize_html(value)
+
+    def validate_body_i18n(self, value):
+        return sanitize_i18n_html(value)
 
     def validate_title(self, value: str):
         v = (value or "").strip()

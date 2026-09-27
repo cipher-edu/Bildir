@@ -31,12 +31,14 @@ function unwrapList<T>(res: { data?: unknown }): T[] {
 export default function RiskPublicPage() {
   const { t, locale } = useI18n();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["compliance-risks-public", locale],
     queryFn: async () => unwrapList<Risk>(await complianceApi.risks()),
     retry: false,
   });
 
+  const status = (error as { response?: { status?: number } } | null)?.response?.status;
+  const restricted = status === 401 || status === 403;
   const items = data ?? [];
 
   return (
@@ -59,7 +61,9 @@ export default function RiskPublicPage() {
         )}
 
         {isError && (
-          <p className="text-sm text-amber-200/90">{t("common.error")}</p>
+          <p className="text-sm text-amber-200/90">
+            {restricted ? t("risk.restricted") : t("common.error")}
+          </p>
         )}
 
         {!isLoading && !isError && items.length === 0 && (

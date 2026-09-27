@@ -16,14 +16,17 @@ class IsComplianceStaff(BasePermission):
         return bool(u and u.is_authenticated and getattr(u, "role", None) in STAFF_ROLES)
 
 
-class IsRiskPublicReadOrStaffWrite(BasePermission):
-    """GET ochiq (shaffoflik); yozish — admin/staff."""
+class IsRiskStaff(BasePermission):
+    """Xavf reestri ichki hujjat: o'qish — komplayens xodimi, yozish — admin."""
 
     def has_permission(self, request, view):
-        if request.method in SAFE_METHODS:
-            return True
         u = request.user
-        return bool(u and u.is_authenticated and getattr(u, "role", None) in STAFF_ROLES)
+        if not (u and u.is_authenticated):
+            return False
+        role = getattr(u, "role", None)
+        if request.method in SAFE_METHODS:
+            return role in STAFF_ROLES
+        return role in ADMIN_ROLES
 
 
 class IsWhistlePublicCreate(BasePermission):

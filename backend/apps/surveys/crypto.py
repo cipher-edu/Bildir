@@ -5,8 +5,8 @@ So'rovnoma javoblari uchun shifrlash va butunlik (integrity).
 - HMAC-SHA256: muhr — o'zgartirish aniqlanadi
 - Participation token: bir martalik, faqat hash saqlanadi
 
-Kalitlar DB da saqlanmaydi — env / Django SECRET_KEY hosilasidan.
-Production: SURVEY_ENCRYPTION_KEY va SURVEY_HMAC_KEY ni Vault/env orqali bering.
+Kalitlar DB da saqlanmaydi. Production: SURVEY_ENCRYPTION_KEY, SURVEY_HMAC_KEY,
+SURVEY_TOKEN_KEY majburiy. SECRET_KEY hosilasi faqat DEBUG.
 """
 from __future__ import annotations
 
@@ -22,8 +22,19 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from django.conf import settings
 
 
+def _material_key(secret: str, purpose: str, length: int = 32) -> bytes:
+    material = f"{secret}|survey|{purpose}".encode("utf-8")
+    return hashlib.sha256(material).digest()[:length]
+
+
 def _derive_key(env_name: str, purpose: str, length: int = 32) -> bytes:
-    """Env dan kalit o'qiydi yoki SECRET_KEY dan barqaror hosila qiladi."""
+    """Env kaliti. Yo'q bo'lsa faqat DEBUG da SECRET_KEY hosilasi.
+
+    Production da SECRET_KEY dan jim hosila qilinmaydi: placeholder kalit
+    bazadagi javoblarni ochib berardi.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
     raw = os.environ.get(env_name) or getattr(settings, env_name, None)
     if raw:
         if isinstance(raw, bytes):
@@ -36,8 +47,19 @@ def _derive_key(env_name: str, purpose: str, length: int = 32) -> bytes:
         if len(data) >= length:
             return data[:length]
         return hashlib.sha256(data + purpose.encode()).digest()[:length]
-    material = f"{settings.SECRET_KEY}|survey|{purpose}".encode("utf-8")
-    return hashlib.sha256(material).digest()[:length]
+    if not getattr(settings, "DEBUG", False):
+        raise ImproperlyConfigured(
+            f"{env_name} productionda majburiy. SECRET_KEY dan hosila qilinmaydi."
+        )
+    return _material_key(str(settings.SECRET_KEY), purpose, length)
+
+
+def legacy_key(purpose: str, length: int = 32) -> bytes | None:
+    """Bir martalik migratsiya. So'rov yo'lida ishlatilmaydi."""
+    secret = (os.environ.get("SURVEY_LEGACY_SECRET") or "").strip()
+    if not secret:
+        return None
+    return _material_key(secret, purpose, length)
 
 
 def _enc_key() -> bytes:
@@ -88,11 +110,26 @@ def encrypt_answers(answers: list | dict) -> str:
     return base64.b64encode(nonce + ct).decode("ascii")
 
 
-def decrypt_answers(blob: str) -> Any:
+def _decrypt_with(key: bytes, blob: str) -> Any:
     raw = base64.b64decode(blob.encode("ascii"))
     nonce, ct = raw[:12], raw[12:]
-    plaintext = AESGCM(_enc_key()).decrypt(nonce, ct, None)
+    plaintext = AESGCM(key).decrypt(nonce, ct, None)
     return json.loads(plaintext.decode("utf-8"))
+
+
+def decrypt_answers(blob: str) -> Any:
+    return _decrypt_with(_enc_key(), blob)
+
+
+def decrypt_answers_any(blob: str) -> Any:
+    """Joriy kalit, bo'lmasa SURVEY_LEGACY_SECRET hosilasi. Faqat migratsiya."""
+    try:
+        return decrypt_answers(blob)
+    except Exception:
+        old = legacy_key("aes-gcm-v1")
+        if old is None:
+            raise
+        return _decrypt_with(old, blob)
 
 
 def issue_participation_token() -> str:

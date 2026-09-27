@@ -45,10 +45,9 @@ class TestLoginFlowAllRoles:
             "password": "TestPass123!",
         })
         assert r.status_code == 200
-        tokens = r.data["data"]["tokens"]
-        assert "access" in tokens
-
-        client.credentials(HTTP_AUTHORIZATION=f"Bearer {tokens['access']}")
+        assert "tokens" not in r.data["data"]
+        access = r.cookies["bildir_access"].value
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
         r2 = client.get("/api/v1/auth/me/")
         assert r2.status_code == 200
         me = r2.data.get("data", r2.data)

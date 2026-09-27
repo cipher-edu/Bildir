@@ -33,9 +33,16 @@ INSTALLED_APPS = [
     "apps.compliance",
 ]
 
+# Ochiq ro'yxatdan o'tish. production.py buni majburan yopadi.
+ALLOW_OPEN_REGISTRATION = config("ALLOW_OPEN_REGISTRATION", default=False, cast=bool)
+
 # ---- Surveys (xavfsizlik kalitlari — production da Vault/env) ----
-# SURVEY_ENCRYPTION_KEY / SURVEY_HMAC_KEY / SURVEY_TOKEN_KEY — base64 yoki raw
-# Berilmasa SECRET_KEY dan hosila qilinadi (faqat dev).
+# SURVEY_ENCRYPTION_KEY / SURVEY_HMAC_KEY / SURVEY_TOKEN_KEY — base64 yoki raw.
+# Production da majburiy. DEBUG da bo'sh bo'lsa SECRET_KEY dan hosila (faqat dev).
+SURVEY_ENCRYPTION_KEY = config("SURVEY_ENCRYPTION_KEY", default="")
+SURVEY_HMAC_KEY = config("SURVEY_HMAC_KEY", default="")
+SURVEY_TOKEN_KEY = config("SURVEY_TOKEN_KEY", default="")
+WHISTLE_ENCRYPTION_KEY = config("WHISTLE_ENCRYPTION_KEY", default="")
 
 MIDDLEWARE = [
     "utils.request_id_middleware.RequestIDMiddleware",
@@ -160,6 +167,7 @@ REST_FRAMEWORK = {
         "login_account": config("THROTTLE_LOGIN_ACCOUNT", default="20/hour"),
         "token_refresh": config("THROTTLE_TOKEN_REFRESH", default="30/min"),
         "forgot_password": config("THROTTLE_FORGOT_PASSWORD", default="5/hour"),
+        "whistle": config("THROTTLE_WHISTLE", default="30/hour"),
     },
 }
 

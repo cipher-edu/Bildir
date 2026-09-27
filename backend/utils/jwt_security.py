@@ -29,6 +29,9 @@ def refresh_max_age() -> int:
 
 
 def cookie_secure() -> bool:
+    explicit = getattr(settings, "JWT_COOKIE_SECURE", None)
+    if explicit is not None:
+        return bool(explicit)
     return not getattr(settings, "DEBUG", True)
 
 

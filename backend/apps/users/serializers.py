@@ -48,15 +48,46 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    """Yangi foydalanuvchi ro'yxatdan o'tishi (dev/test uchun)."""
+    """Ochiq ro'yxatdan o'tish. Rol har doim talaba. is_staff berilmaydi."""
     password = serializers.CharField(write_only=True, min_length=8)
 
     class Meta:
         model  = User
+        fields = ["email", "first_name", "last_name", "password"]
+
+    def create(self, validated_data):
+        return User.objects.create_user(
+            **validated_data,
+            role=User.Role.STUDENT,
+            is_staff=False,
+            is_superuser=False,
+        )
+
+
+class AdminCreateUserSerializer(RegisterSerializer):
+    """Superadmin yangi hisob ochadi. Superadmin rolini faqat superadmin beradi."""
+    role = serializers.ChoiceField(choices=User.Role.choices, default=User.Role.STUDENT)
+
+    class Meta(RegisterSerializer.Meta):
         fields = ["email", "first_name", "last_name", "password", "role"]
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        role = validated_data.get("role") or User.Role.STUDENT
+        request = self.context.get("request")
+        actor = getattr(request, "user", None)
+        if role == User.Role.SUPERADMIN and getattr(actor, "role", None) != User.Role.SUPERADMIN:
+            raise serializers.ValidationError(
+                {"role": "Superadmin rolini faqat superadmin bera oladi."}
+            )
+        return User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            first_name=validated_data.get("first_name") or "",
+            last_name=validated_data.get("last_name") or "",
+            role=role,
+            is_staff=False,
+            is_superuser=False,
+        )
 
 
 class ChangePasswordSerializer(serializers.Serializer):

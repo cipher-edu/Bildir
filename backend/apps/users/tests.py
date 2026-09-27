@@ -66,9 +66,9 @@ class TestLoginView:
         r = api_client.post(self.url, {"email": student.email, "password": "TestPass123!"})
         assert r.status_code == status.HTTP_200_OK
         assert r.data["success"] is True
-        tokens = r.data["data"]["tokens"]
-        assert "access" in tokens
-        assert "refresh" in tokens
+        assert "tokens" not in r.data["data"]
+        assert r.data["data"]["auth_mode"] == "cookie"
+        assert "bildir_access" in r.cookies
 
     def test_login_wrong_password(self, api_client, student):
         r = api_client.post(self.url, {"email": student.email, "password": "wrong"})
@@ -148,7 +148,12 @@ class TestRegisterView:
         })
         assert r.status_code == status.HTTP_201_CREATED
         assert r.data["success"] is True
-        assert "access" in r.data["data"]["tokens"]
+        assert "tokens" not in r.data["data"]
+        assert "bildir_access" in r.cookies
+        from apps.users.models import User
+        created = User.objects.get(email="new@test.uz")
+        assert created.role == "student"
+        assert created.is_staff is False
 
     def test_register_duplicate_email(self, api_client, student):
         r = api_client.post(self.url, {

@@ -92,8 +92,11 @@ Backend: `runserver`, frontend: `next dev` (kod volume orqali).
 
 ## Production eslatmalar
 
-- `DEBUG=False`, kuchli `DJANGO_SECRET_KEY` / `POSTGRES_PASSWORD`
+`docker compose up` production sozlamasini ishlatadi. Hot-reload uchun dev overlay DEBUG ni yoqadi va ro'yxatdan o'tishni ochadi.
+
+- `DEBUG=False`, kuchli `DJANGO_SECRET_KEY` / `POSTGRES_PASSWORD` / `REDIS_PASSWORD`
 - `DJANGO_SETTINGS_MODULE=config.settings.production`
+- `SURVEY_ENCRYPTION_KEY`, `SURVEY_HMAC_KEY`, `SURVEY_TOKEN_KEY` majburiy
 - HTTPS reverse-proxy orqasida: `SECURE_SSL_REDIRECT=True`, cookie secure flagnar
 - Volume backup: `postgres_data`, `backend_media`
 

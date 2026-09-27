@@ -84,6 +84,11 @@ class ResponsiblePersonSerializer(serializers.ModelSerializer):
             data[field] = pick_i18n(base, i18n, loc)
             data[f"{field}_i18n"] = ensure_i18n_bucket(base, i18n)
         data["locale"] = loc
+        req_user = getattr(req, "user", None) if req is not None else None
+        role = getattr(req_user, "role", None) if getattr(req_user, "is_authenticated", False) else None
+        if role not in {"admin", "superadmin", "audit_inspector"}:
+            for key in ("phone", "email", "office_room"):
+                data.pop(key, None)
         return data
 
 
@@ -179,6 +184,15 @@ class AppealSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request is not None else None
+        role = getattr(user, "role", None) if getattr(user, "is_authenticated", False) else None
+        if role not in {"admin", "superadmin", "audit_inspector"}:
+            data.pop("admin_note", None)
+        return data
 
     def get_user_name(self, obj):
         u = obj.user

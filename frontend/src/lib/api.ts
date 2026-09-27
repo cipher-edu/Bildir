@@ -51,6 +51,11 @@ async function silentRefresh(): Promise<string | null> {
           useAuthStore.getState().setAccessToken(newAccess);
           return newAccess as string;
         }
+        // Tokenlar faqat httpOnly cookie da. 200 — cookie yangilangan.
+        if (res.data?.success || res.status === 200) {
+          useAuthStore.getState().setAccessToken(null);
+          return "cookie";
+        }
         return null;
       } catch {
         return null;
@@ -76,7 +81,11 @@ api.interceptors.response.use(
       const newAccess = await silentRefresh();
       if (newAccess) {
         original.headers = original.headers || {};
-        original.headers.Authorization = `Bearer ${newAccess}`;
+        if (newAccess === "cookie") {
+          delete original.headers.Authorization;
+        } else {
+          original.headers.Authorization = `Bearer ${newAccess}`;
+        }
         return api(original);
       }
       useAuthStore.getState().logout();

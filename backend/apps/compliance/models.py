@@ -57,7 +57,7 @@ class WhistleReport(models.Model):
         CLOSED = "closed", "Yopilgan"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tracking_code = models.CharField(max_length=16, unique=True, db_index=True)
+    tracking_code = models.CharField(max_length=64, unique=True, db_index=True)
     message = models.TextField()
     # ixtiyoriy kontekst (fakultet va h.k.) — identifikatsiyasiz
     context = models.CharField(max_length=200, blank=True)
@@ -73,6 +73,15 @@ class WhistleReport(models.Model):
     def __str__(self):
         return self.tracking_code
 
+    def save(self, *args, **kwargs):
+        from utils.at_rest import is_sealed, seal_text
+
+        if self.message and not is_sealed(self.message):
+            self.message = seal_text(self.message, purpose="whistle-message")
+        if self.context and not is_sealed(self.context):
+            self.context = seal_text(self.context, purpose="whistle-context")
+        super().save(*args, **kwargs)
+
     @staticmethod
     def generate_code() -> str:
-        return secrets.token_hex(4).upper()
+        return secrets.token_hex(16)

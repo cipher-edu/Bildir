@@ -346,6 +346,7 @@ const en: Dict = {
     medium: "Medium",
     high: "High",
     critical: "Critical",
+    restricted: "The risk register is only available to compliance staff.",
   },
   whistle: {
     title: "Anonymous tip",

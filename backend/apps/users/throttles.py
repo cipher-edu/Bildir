@@ -69,6 +69,20 @@ class LoginAccountThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": digest}
 
 
+class WhistleCreateThrottle(SimpleRateThrottle):
+    """Anonim xabar — IP bo'yicha. Umumiy anon limitidan qat'iyroq."""
+
+    scope = "whistle"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST":
+            return None
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": self.get_ident(request),
+        }
+
+
 class ForgotPasswordThrottle(SimpleRateThrottle):
     """Parol tiklash — IP bo'yicha."""
 

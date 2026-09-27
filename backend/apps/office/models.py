@@ -4,6 +4,7 @@ SLA: murojaatga 72 soat ichida javob berish majburiy.
 """
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import timedelta
 
@@ -126,7 +127,7 @@ class Appeal(models.Model):
     )
     # Kuzatuv kodi + QR (Survey NSPI MessageToResponsible uslubi)
     unique_code = models.CharField(
-        max_length=8,
+        max_length=32,
         unique=True,
         editable=False,
         blank=True,
@@ -157,16 +158,14 @@ class Appeal(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        import random
-
         if not self.unique_code:
-            for _ in range(12):
-                code = "".join(str(random.randint(0, 9)) for _ in range(8))
+            for _ in range(8):
+                code = secrets.token_hex(8)
                 if not Appeal.objects.filter(unique_code=code).exclude(pk=self.pk).exists():
                     self.unique_code = code
                     break
             else:
-                self.unique_code = uuid.uuid4().hex[:8].upper()
+                self.unique_code = secrets.token_hex(16)
         is_new = self.pk is None
         super().save(*args, **kwargs)
         # QR async (Celery) yoki sync fallback

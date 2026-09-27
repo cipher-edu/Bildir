@@ -344,6 +344,7 @@ const uz = {
     medium: "O'rta",
     high: "Yuqori",
     critical: "Kritik",
+    restricted: "Xavf reestri faqat komplayens xodimlari uchun.",
   },
   whistle: {
     title: "Anonim xabar",

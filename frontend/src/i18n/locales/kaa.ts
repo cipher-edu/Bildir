@@ -346,6 +346,7 @@ const kaa: Dict = {
     medium: "Orta",
     high: "Joqarı",
     critical: "Kritik",
+    restricted: "Qáwip dizimi tek komplayens xızmetkerleri ushın.",
   },
   whistle: {
     title: "Anonim xabar",

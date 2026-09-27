@@ -30,13 +30,14 @@ async function proxyMedia(
   const url = `${backendOrigin()}/media/${sub}${req.nextUrl.search}`;
 
   try {
+    const headersIn = new Headers();
+    headersIn.set("Accept", req.headers.get("accept") || "*/*");
+    const cookie = req.headers.get("cookie");
+    if (cookie) headersIn.set("cookie", cookie);
+
     const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        // cache-friendly
-        Accept: req.headers.get("accept") || "*/*",
-      },
-      // media uchun redirect
+      method: req.method,
+      headers: headersIn,
       redirect: "follow",
     });
 
@@ -50,7 +51,11 @@ async function proxyMedia(
     const cl = res.headers.get("content-length");
     if (cl) headers.set("content-length", cl);
     const cc = res.headers.get("cache-control");
-    headers.set("cache-control", cc || "public, max-age=86400, immutable");
+    const cd = res.headers.get("content-disposition");
+    const nosniff = res.headers.get("x-content-type-options");
+    if (cd) headers.set("content-disposition", cd);
+    if (nosniff) headers.set("x-content-type-options", nosniff);
+    headers.set("cache-control", cc || "private, no-store");
 
     const buf = await res.arrayBuffer();
     return new NextResponse(buf, { status: 200, headers });

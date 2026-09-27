@@ -143,7 +143,7 @@ class MyAppealsView(APIView):
             .prefetch_related("attachments")
             .select_related("answered_by", "responsible_person")
         )
-        return _ok(AppealSerializer(qs, many=True).data)
+        return _ok(AppealSerializer(qs, many=True, context={"request": request}).data)
 
     def post(self, request):
         ser = AppealCreateSerializer(data=request.data)
@@ -200,7 +200,7 @@ class MyAppealsView(APIView):
             .select_related("answered_by", "responsible_person")
             .first()
         )
-        return _ok(AppealSerializer(appeal).data, 201)
+        return _ok(AppealSerializer(appeal, context={"request": request}).data, 201)
 
 
 class MyAppealDetailView(APIView):
@@ -224,7 +224,7 @@ class MyAppealDetailView(APIView):
                 appeal.refresh_from_db()
             except Exception:
                 pass
-        return _ok(AppealSerializer(appeal).data)
+        return _ok(AppealSerializer(appeal, context={"request": request}).data)
 
 
 # ── Murojaatlar (admin) ───────────────────────────────────────
@@ -261,7 +261,7 @@ class AdminAppealsView(APIView):
                 | Q(user__first_name__icontains=q)
                 | Q(user__last_name__icontains=q)
             )
-        return _ok(AppealSerializer(qs[:300], many=True).data)
+        return _ok(AppealSerializer(qs[:300], many=True, context={"request": request}).data)
 
 
 class AdminAppealDetailView(APIView):
@@ -276,7 +276,7 @@ class AdminAppealDetailView(APIView):
             )
         except Appeal.DoesNotExist:
             return _err("Topilmadi.", 404)
-        return _ok(AppealSerializer(appeal).data)
+        return _ok(AppealSerializer(appeal, context={"request": request}).data)
 
 
 class AdminAppealAnswerView(APIView):
@@ -329,7 +329,7 @@ class AdminAppealAnswerView(APIView):
             .prefetch_related("attachments")
             .get(pk=appeal.pk)
         )
-        return _ok(AppealSerializer(appeal).data)
+        return _ok(AppealSerializer(appeal, context={"request": request}).data)
 
 
 class AdminAppealStatusView(APIView):
@@ -346,4 +346,4 @@ class AdminAppealStatusView(APIView):
             return _err(f"status: {', '.join(sorted(allowed))}", 400)
         appeal.status = status
         appeal.save(update_fields=["status", "updated_at"])
-        return _ok(AppealSerializer(appeal).data)
+        return _ok(AppealSerializer(appeal, context={"request": request}).data)

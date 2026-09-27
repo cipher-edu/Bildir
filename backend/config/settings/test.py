@@ -4,6 +4,8 @@ auth-starter — Test Settings
 from .base import *
 
 DEBUG = True
+JWT_COOKIE_SECURE = False
+ALLOW_OPEN_REGISTRATION = True
 SECRET_KEY = "test-secret-key-not-for-production-use-only"
 
 DATABASES = {

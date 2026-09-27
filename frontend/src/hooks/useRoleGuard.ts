@@ -27,7 +27,10 @@ export function useRoleGuard(allowedGroups: RoleGroup[]) {
 
     // role faqat ma'lum UserRole qiymatlaridan biri bo'lsa tekshiramiz
     const role = user.role as UserRole;
-    if (!(role in ROLE_GROUP)) return;           // noma'lum role — xavfsiz o'tkazib yuboramiz
+    if (!(role in ROLE_GROUP)) {
+      router.replace("/login");
+      return;
+    }
 
     const group = getRoleGroup(role);
     if (!allowedRef.current.includes(group)) {

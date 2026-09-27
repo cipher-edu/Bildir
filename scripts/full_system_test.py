@@ -213,6 +213,7 @@ def main():
                 or data.get("access_token")
                 or d.get("access")
                 or d.get("access_token")
+                or r.cookies.get("bildir_access")
             )
         except Exception:
             access_token = None
@@ -474,6 +475,7 @@ def main():
         ("Unauth me blocked", "auth/me/", {401, 403}),
         ("Unauth admin users blocked", "auth/users/", {401, 403}),
         ("Unauth appeals blocked", "office/appeals/", {401, 403}),
+        ("Unauth risk register blocked", "compliance/risks/", {401, 403}),
     ]:
         url = urljoin(BASE_API, path)
         t0 = time.perf_counter()

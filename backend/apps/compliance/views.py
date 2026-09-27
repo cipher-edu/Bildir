@@ -4,11 +4,13 @@ from rest_framework.parsers import FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.users.throttles import WhistleCreateThrottle
+
 from .models import ComplianceRisk, WhistleReport
 from .permissions import (
     IsComplianceAdmin,
     IsComplianceStaff,
-    IsRiskPublicReadOrStaffWrite,
+    IsRiskStaff,
     IsWhistlePublicCreate,
 )
 from .serializers import (
@@ -27,7 +29,7 @@ def _err(detail, code=400):
 
 
 class RiskListCreateView(APIView):
-    permission_classes = [IsRiskPublicReadOrStaffWrite]
+    permission_classes = [IsRiskStaff]
     parser_classes = [JSONParser, FormParser]
 
     def get(self, request):
@@ -79,6 +81,7 @@ class RiskDetailView(APIView):
 
 class WhistleListCreateView(APIView):
     permission_classes = [IsWhistlePublicCreate]
+    throttle_classes = [WhistleCreateThrottle]
     parser_classes = [JSONParser, FormParser]
 
     def get(self, request):

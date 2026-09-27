@@ -11,6 +11,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
 from utils.jwt_security import ACCESS_COOKIE, is_access_denylisted
+from utils.session_epoch import token_epoch_ok
 
 
 class CookieJWTAuthentication(JWTAuthentication):
@@ -38,4 +39,7 @@ class CookieJWTAuthentication(JWTAuthentication):
         jti = validated.get(settings.SIMPLE_JWT.get("JTI_CLAIM", "jti"))
         if is_access_denylisted(jti):
             raise InvalidToken("Token revoked (logout).")
+        user_id = validated.get(settings.SIMPLE_JWT.get("USER_ID_CLAIM", "user_id"))
+        if not token_epoch_ok(user_id, validated.get("epoch")):
+            raise InvalidToken("Session expired.")
         return validated
